@@ -9,41 +9,38 @@ import (
 	"strings"
 
 	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
-	"github.com/hirotake111/ivy_lee_todo/pkg/db"
-	"github.com/hirotake111/ivy_lee_todo/pkg/domain"
+	"github.com/hirotake111/ivy_lee_todo/pkg/service"
 )
 
 type Cli struct {
-	db     *db.Db
-	repo   domain.TaskRepository
-	reader *bufio.Reader
+	service *service.Service
+	reader  *bufio.Reader
 }
 
-func New(db *db.Db, repo domain.TaskRepository) *Cli {
+func New(service *service.Service) *Cli {
 	reader := bufio.NewReader(os.Stdin)
 	return &Cli{
-		repo:   repo,
-		db:     db,
-		reader: reader,
+		service: service,
+		reader:  reader,
 	}
 }
 
 func (c *Cli) Run(ctx context.Context) error {
 LOOP:
 	for {
-		if err := c.listTasks(ctx); err != nil {
+		if err := c.list(ctx); err != nil {
+			fmt.Printf("Error listing tasks: %s\n", err)
 			break
 		}
-		fmt.Printf("\n[a]dd a new task\t[q]uit program\nEnter command:")
-		cmd, err := c.reader.ReadString('\n')
+		cmd, err := c.getCommand()
 		if err != nil {
-			return err
+			fmt.Printf("Error getting a command: %s\n", err)
+			break
 		}
-		switch strings.TrimSpace(cmd) {
+		switch cmd {
 		case "a":
-			fmt.Println("You'are adding a new task")
-			if err := c.AddTask(ctx); err != nil {
-				fmt.Printf("error: %s\n", err.Error())
+			if err := c.add(ctx); err != nil {
+				fmt.Printf("Error adding a new task: %s\n", err)
 			}
 		case "q":
 			fmt.Println("Quitting program...")
@@ -55,22 +52,28 @@ LOOP:
 	return nil
 }
 
-func (c *Cli) AddTask(ctx context.Context) error {
+func (c Cli) getCommand() (string, error) {
+	fmt.Printf("\n[a]dd a new task\t[q]uit program\nEnter command:")
+	cmd, err := c.reader.ReadString('\n')
+	if err != nil {
+		return "", err
+	}
+	return strings.TrimSpace(cmd), nil
+}
+
+// Add task mode
+func (c *Cli) add(ctx context.Context) error {
 	fmt.Printf("\n\nEnter title:")
 	title, err := c.reader.ReadString('\n')
 	if err != nil {
 		return err
 	}
-	req := domain.NewTaskRequest{
-		Title:       strings.TrimSpace(title),
-		Description: "", // TODO: implement
-	}
-	return c.repo.Create(ctx, c.db, &req)
+	return c.service.AddTask(ctx, title, "")
 }
 
-// listTasks displays a listTasks of actionable tasks
-func (c *Cli) listTasks(ctx context.Context) error {
-	tasks, err := c.repo.List(ctx, c.db)
+// list task mode
+func (c *Cli) list(ctx context.Context) error {
+	tasks, err := c.service.ListTasks(ctx)
 	if err != nil && !errors.Is(err, apperrors.NotFound) {
 		return err
 	}
