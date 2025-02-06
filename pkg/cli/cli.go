@@ -59,7 +59,6 @@ LOOP:
 
 // delete task mode
 func (c *Cli) delete(ctx context.Context) error {
-	fmt.Printf("\n\nID you want to delete:")
 	idStr, err := c.reader.ReadString('\n')
 	if err != nil {
 		return err

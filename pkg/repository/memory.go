@@ -69,9 +69,9 @@ func (m *MemoryRepository) len() int {
 	return len(m.tasks)
 }
 
-func (m MemoryRepository) P() {
+func (m MemoryRepository) debug() {
 	for _, v := range m.tasks {
-		fmt.Printf("actionable: %t, delted: %t\n", v.IsActionable(), v.IsDeleted(), v.Title())
+		fmt.Printf("actionable: %t,\tdeleted: %t\t%s\n", v.IsActionable(), v.IsDeleted(), v.Title())
 	}
 	fmt.Println("")
 }
