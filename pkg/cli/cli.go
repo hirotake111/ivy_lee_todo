@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
@@ -42,6 +43,10 @@ LOOP:
 			if err := c.add(ctx); err != nil {
 				fmt.Printf("Error adding a new task: %s\n", err)
 			}
+		case "d":
+			if err := c.delete(ctx); err != nil {
+				fmt.Printf("\nError deleting a new task: %s\n", err)
+			}
 		case "q":
 			fmt.Println("Quitting program...")
 			break LOOP
@@ -52,8 +57,23 @@ LOOP:
 	return nil
 }
 
+// delete task mode
+func (c *Cli) delete(ctx context.Context) error {
+	fmt.Printf("\n\nID you want to delete:")
+	idStr, err := c.reader.ReadString('\n')
+	if err != nil {
+		return err
+	}
+	idStr = strings.TrimSpace(idStr)
+	id, err := strconv.Atoi(idStr)
+	if err != nil {
+		return err
+	}
+	return c.service.DeleteTask(ctx, id)
+}
+
 func (c Cli) getCommand() (string, error) {
-	fmt.Printf("\n[a]dd a new task\t[q]uit program\nEnter command:")
+	fmt.Printf("\n[a]dd a new task  [d]elete a task  [q]uit program\nEnter command:")
 	cmd, err := c.reader.ReadString('\n')
 	if err != nil {
 		return "", err
@@ -68,22 +88,23 @@ func (c *Cli) add(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
+	title = strings.TrimSpace(title)
 	return c.service.AddTask(ctx, title, "")
 }
 
 // list task mode
 func (c *Cli) list(ctx context.Context) error {
-	tasks, err := c.service.ListTasks(ctx)
+	tasks, err := c.service.ListActionableTask(ctx)
 	if err != nil && !errors.Is(err, apperrors.NotFound) {
 		return err
 	}
-	fmt.Printf("==== Tasks ====\n\n")
+	fmt.Printf("\n\n==== Tasks ====\n\n")
 	if len(tasks) == 0 {
 		fmt.Println("\nNo Tasks")
 		return nil
 	}
-	for i, t := range tasks {
-		fmt.Printf("%d - %s\n", i+1, t.Title())
+	for _, t := range tasks {
+		fmt.Printf("%d - %s\n", t.Id(), t.Title())
 	}
 	return nil
 }

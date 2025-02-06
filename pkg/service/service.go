@@ -12,9 +12,21 @@ type Service struct {
 	repo domain.TaskRepository
 }
 
-// TODO: implement
-func (s *Service) ListTasks(ctx context.Context) ([]domain.Task, error) {
-	return s.repo.List(ctx, s.db)
+func (s *Service) DeleteTask(ctx context.Context, id int) error {
+	return s.repo.Delete(ctx, s.db, id)
+}
+
+func (s *Service) ListActionableTask(ctx context.Context) (l []*domain.Task, err error) {
+	ts, err := s.repo.List(ctx, s.db)
+	if err != nil {
+		return
+	}
+	for _, t := range ts {
+		if !t.IsDeleted() && t.IsActionable() {
+			l = append(l, t)
+		}
+	}
+	return
 }
 
 func (s *Service) AddTask(ctx context.Context, title, description string) error {
