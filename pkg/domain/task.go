@@ -24,6 +24,7 @@ func (t Task) IsActionable() bool {
 	return t.actionable
 }
 
+// ToActionable makes the task itself actionable
 func (t *Task) ToActionable() *Task {
 	t.actionable = true
 	return t

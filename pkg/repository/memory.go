@@ -18,6 +18,16 @@ type MemoryRepository struct {
 	tasks []*domain.Task
 }
 
+// ListNonactionable implements domain.TaskRepository.
+func (m *MemoryRepository) ListNonactionable(ctx context.Context, db *db.Db) (ts []*domain.Task, err error) {
+	for _, t := range m.tasks {
+		if !t.IsActionable() {
+			ts = append(ts, t)
+		}
+	}
+	return
+}
+
 func NewMemoryRepository() *MemoryRepository {
 	return &MemoryRepository{
 		tasks: make([]*domain.Task, 0, defaultMemorySize),
@@ -56,13 +66,23 @@ func (m *MemoryRepository) Find(ctx context.Context, db *db.Db, id int) (*domain
 }
 
 // List implements domain.TaskRepository.
-func (m *MemoryRepository) List(ctx context.Context, db *db.Db) ([]*domain.Task, error) {
-	return m.tasks, nil
+func (m *MemoryRepository) List(ctx context.Context, db *db.Db) (ts []*domain.Task, err error) {
+	for _, t := range m.tasks {
+		if t.IsActionable() {
+			ts = append(ts, t)
+		}
+	}
+	return
 }
 
 // Update implements domain.TaskRepository.
 func (m *MemoryRepository) Update(ctx context.Context, db *db.Db, task *domain.Task) error {
-	panic("unimplemented")
+	for i, t := range m.tasks {
+		if t.Id() == task.Id() {
+			m.tasks[i] = task
+		}
+	}
+	return nil
 }
 
 func (m *MemoryRepository) len() int {
