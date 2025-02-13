@@ -32,7 +32,7 @@ LOOP:
 	for {
 		if displayedPlanned {
 			displayedPlanned = false
-			if err := c.listNonActionable(ctx); err != nil {
+			if err := c.listPlannedTasks(ctx); err != nil {
 				fmt.Printf("Error listing non-actionable tasks: %s\n", err)
 			}
 		} else {
@@ -59,7 +59,12 @@ LOOP:
 			}
 		case "m":
 			if err := c.makeActionable(ctx); err != nil {
-				fmt.Printf("\nError making a task actionable: %s\n", err)
+				var exceededErr apperrors.TaskNumbersExceededError
+				if errors.As(err, &exceededErr) {
+					fmt.Printf("\nYou can't have more than %d tasks", exceededErr.MaxTaskNum())
+				} else {
+					fmt.Printf("\nError making a task actionable: %s\n", err)
+				}
 			}
 		case "q":
 			fmt.Println("Quitting program...")
@@ -71,8 +76,8 @@ LOOP:
 	return nil
 }
 
-func (c *Cli) listNonActionable(ctx context.Context) any {
-	tasks, err := c.service.ListNonActionableTasks(ctx)
+func (c *Cli) listPlannedTasks(ctx context.Context) any {
+	tasks, err := c.service.ListPlannedTasks(ctx)
 	if err != nil && !errors.Is(err, apperrors.NotFound) {
 		return err
 	}
@@ -130,12 +135,7 @@ func (c *Cli) makeActionable(ctx context.Context) error {
 	if err != nil {
 		return err
 	}
-	t, err := c.service.Find(ctx, id)
-	if err != nil && errors.Is(err, apperrors.NotFound) {
-		return err
-	}
-	t = t.ToActionable()
-	return c.service.Update(ctx, t)
+	return c.service.MakeActionable(ctx, id)
 }
 
 // list task mode
