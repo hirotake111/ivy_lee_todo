@@ -30,7 +30,8 @@ func (s *SQLiteRepository) Create(ctx context.Context, db *db.Db, t *domain.NewT
 
 // Delete implements domain.TaskRepository.
 func (s *SQLiteRepository) Delete(ctx context.Context, db *db.Db, id int) error {
-	panic("unimplemented")
+	_, err := db.Exec(`DELETE FROM task WHERE id = $1;`, id)
+	return err
 }
 
 // Find implements domain.TaskRepository.
