@@ -5,7 +5,15 @@ type Task struct {
 	title       string
 	description string
 	actionable  bool
-	deleted     bool
+}
+
+func NewTask(id int, title, description string) *Task {
+	return &Task{
+		id:          id,
+		title:       title,
+		description: description,
+		actionable:  false,
+	}
 }
 
 func (t Task) Id() int {
@@ -27,14 +35,5 @@ func (t Task) IsActionable() bool {
 // ToActionable makes the task itself actionable
 func (t *Task) ToActionable() *Task {
 	t.actionable = true
-	return t
-}
-
-func (t Task) IsDeleted() bool {
-	return t.deleted
-}
-
-func (t *Task) ToDeleted() *Task {
-	t.deleted = true
 	return t
 }

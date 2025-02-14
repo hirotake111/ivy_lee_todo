@@ -94,6 +94,7 @@ func (c *Cli) listPlannedTasks(ctx context.Context) any {
 
 // delete task mode
 func (c *Cli) delete(ctx context.Context) error {
+	fmt.Printf("\n\nEnter ID:")
 	idStr, err := c.reader.ReadString('\n')
 	if err != nil {
 		return err

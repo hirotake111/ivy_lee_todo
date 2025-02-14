@@ -47,11 +47,13 @@ func (m *MemoryRepository) Create(ctx context.Context, db *db.Db, req *domain.Ne
 
 // Delete implements domain.TaskRepository.
 func (m *MemoryRepository) Delete(ctx context.Context, db *db.Db, id int) error {
-	i := id - 1
-	if i < 0 || i >= m.len() {
-		return fmt.Errorf("invalid ID '%d' specified", id)
+	var tasks []*domain.Task
+	for _, t := range m.tasks {
+		if t.Id() != id {
+			tasks = append(tasks, t)
+		}
 	}
-	m.tasks[i] = m.tasks[i].ToDeleted()
+	m.tasks = tasks
 	return nil
 }
 
@@ -91,7 +93,7 @@ func (m *MemoryRepository) len() int {
 
 func (m MemoryRepository) debug() {
 	for _, v := range m.tasks {
-		fmt.Printf("actionable: %t,\tdeleted: %t\t%s\n", v.IsActionable(), v.IsDeleted(), v.Title())
+		fmt.Printf("actionable: %t,\t%s\n", v.IsActionable(), v.Title())
 	}
 	fmt.Println("")
 }

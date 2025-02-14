@@ -8,5 +8,5 @@ Ivy Lee Method Todo App
 
 - [x] list non-actionable list
 - [x] switch two lists
-- [ ] limit the number of actionable tasks to 6
+- [x] limit the number of actionable tasks to 6
 - [ ] sqlite implementation, or store data into a file

@@ -2,6 +2,8 @@ package service
 
 import (
 	"context"
+	"fmt"
+	"log"
 
 	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
 	"github.com/hirotake111/ivy_lee_todo/pkg/db"
@@ -29,6 +31,7 @@ func (s *Service) MakeActionable(ctx context.Context, id int) error {
 		return apperrors.NewTaskExceededError(tl.MaxTskNum())
 	}
 	t, err := s.repo.Find(ctx, s.db, id)
+	log.Printf("debug task: %+v\n", t)
 	if err != nil {
 		return err
 	}
@@ -44,34 +47,17 @@ func (s *Service) Find(ctx context.Context, id int) (*domain.Task, error) {
 	return s.repo.Find(ctx, s.db, id)
 }
 
-func (s *Service) ListPlannedTasks(ctx context.Context) (l []*domain.Task, err error) {
-	ts, err := s.repo.ListNonactionable(ctx, s.db)
-	if err != nil {
-		return
-	}
-	for _, t := range ts {
-		if !t.IsDeleted() {
-			l = append(l, t)
-		}
-	}
-	return
+func (s *Service) ListPlannedTasks(ctx context.Context) ([]*domain.Task, error) {
+	return s.repo.ListNonactionable(ctx, s.db)
 }
 
 func (s *Service) DeleteTask(ctx context.Context, id int) error {
+	fmt.Println("deletetask ()")
 	return s.repo.Delete(ctx, s.db, id)
 }
 
-func (s *Service) ListActionableTask(ctx context.Context) (l domain.TaskList, err error) {
-	ts, err := s.repo.ListActionable(ctx, s.db)
-	if err != nil {
-		return
-	}
-	for _, t := range ts {
-		if !t.IsDeleted() {
-			l = append(l, t)
-		}
-	}
-	return
+func (s *Service) ListActionableTask(ctx context.Context) (domain.TaskList, error) {
+	return s.repo.ListActionable(ctx, s.db)
 }
 
 func (s *Service) AddTask(ctx context.Context, title, description string) error {

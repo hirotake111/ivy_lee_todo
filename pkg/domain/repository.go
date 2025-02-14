@@ -17,7 +17,6 @@ func (t *NewTaskRequest) ToActionableTask(id int) *Task {
 		title:       t.Title,
 		description: t.Description,
 		actionable:  false,
-		deleted:     false,
 	}
 }
 

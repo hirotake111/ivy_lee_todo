@@ -12,8 +12,9 @@ import (
 )
 
 func main() {
-	db := db.NewDb()
-	r := repository.NewMemoryRepository()
+	db := db.NewSqlite3Db(false)
+	r := repository.NewSQLiteRepository()
+	// r := repository.NewMemoryRepository()
 	s := service.NewService(db, r)
 	c := cli.New(s)
 	if err := c.Run(context.Background()); err != nil {
