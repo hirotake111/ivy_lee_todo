@@ -22,21 +22,25 @@ func (t taskDto) toTask() *domain.Task {
 
 type SQLiteRepository struct{}
 
+func NewSQLiteRepository() *SQLiteRepository {
+	return &SQLiteRepository{}
+}
+
 // Create implements domain.TaskRepository.
-func (s *SQLiteRepository) Create(ctx context.Context, db db.Queryer, t *domain.NewTaskRequest) error {
-	_, err := db.Exec(`INSERT INTO task (title, description) VALUES ($1, $2);`, t.Title, t.Description)
+func (s *SQLiteRepository) Create(ctx context.Context, db db.Executor, t *domain.NewTaskRequest) error {
+	_, err := db.Exec(ctx, `INSERT INTO task (title, description) VALUES ($1, $2);`, t.Title, t.Description)
 	return err
 }
 
 // Delete implements domain.TaskRepository.
-func (s *SQLiteRepository) Delete(ctx context.Context, db db.Queryer, id int) error {
-	_, err := db.Exec(`DELETE FROM task WHERE id = $1;`, id)
+func (s *SQLiteRepository) Delete(ctx context.Context, db db.Executor, id int) error {
+	_, err := db.Exec(ctx, `DELETE FROM task WHERE id = $1;`, id)
 	return err
 }
 
 // Find implements domain.TaskRepository.
 func (s *SQLiteRepository) Find(ctx context.Context, db db.Queryer, id int) (*domain.Task, error) {
-	row := db.QueryRow("SELECT id, title, description FROM task WHERE id = $1 and deleted_at is null", id)
+	row := db.QueryRow(ctx, "SELECT id, title, description FROM task WHERE id = $1 and deleted_at is null", id)
 	var t taskDto
 	if err := row.Scan(&t.Id, &t.Title, &t.Description); err != nil {
 		return nil, apperrors.NotFound
@@ -46,7 +50,7 @@ func (s *SQLiteRepository) Find(ctx context.Context, db db.Queryer, id int) (*do
 
 // ListActionable implements domain.TaskRepository.
 func (s *SQLiteRepository) ListActionable(ctx context.Context, db db.Queryer) (domain.TaskList, error) {
-	rows, err := db.Query("SELECT id, title, description FROM task WHERE actionable = 1 and deleted_at is null")
+	rows, err := db.Query(ctx, "SELECT id, title, description FROM task WHERE actionable = 1 and deleted_at is null")
 	if err != nil {
 		return nil, err
 	}
@@ -64,7 +68,7 @@ func (s *SQLiteRepository) ListActionable(ctx context.Context, db db.Queryer) (d
 
 // ListNonactionable implements domain.TaskRepository.
 func (s *SQLiteRepository) ListNonactionable(ctx context.Context, db db.Queryer) ([]*domain.Task, error) {
-	rows, err := db.Query("SELECT id, title, description FROM task WHERE actionable = 0 and deleted_at is null")
+	rows, err := db.Query(ctx, "SELECT id, title, description FROM task WHERE actionable = 0 and deleted_at is null")
 	if err != nil {
 		return nil, err
 	}
@@ -81,14 +85,11 @@ func (s *SQLiteRepository) ListNonactionable(ctx context.Context, db db.Queryer)
 }
 
 // Update implements domain.TaskRepository.
-func (s *SQLiteRepository) Update(ctx context.Context, db db.Queryer, t *domain.Task) error {
+func (s *SQLiteRepository) Update(ctx context.Context, db db.Executor, t *domain.Task) error {
 	_, err := db.Exec(
+		ctx,
 		"UPDATE task SET title = $1, description = $2, actionable = $3 WHERE id = $4",
 		t.Title(), t.Description(), t.IsActionable(), t.Id(),
 	)
 	return err
-}
-
-func NewSQLiteRepository() *SQLiteRepository {
-	return &SQLiteRepository{}
 }

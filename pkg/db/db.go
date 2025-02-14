@@ -20,9 +20,14 @@ var (
 )
 
 type Queryer interface {
-	Exec(query string, args ...any) (sql.Result, error)
-	Query(query string, args ...any) (*sql.Rows, error)
-	QueryRow(query string, args ...any) *sql.Row
+	Query(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRow(ctx context.Context, query string, args ...any) *sql.Row
+}
+
+type Executor interface {
+	Exec(ctx context.Context, query string, args ...any) (sql.Result, error)
+	Query(ctx context.Context, query string, args ...any) (*sql.Rows, error)
+	QueryRow(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 type Transaction struct {
@@ -37,15 +42,15 @@ func (t *Transaction) Commit() error {
 	return t.tx.Commit()
 }
 
-func (t *Transaction) Exec(query string, args ...any) (sql.Result, error) {
+func (t *Transaction) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return t.tx.Exec(query, args...)
 }
 
-func (t *Transaction) Query(query string, args ...any) (*sql.Rows, error) {
+func (t *Transaction) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	return t.tx.Query(query, args...)
 }
 
-func (t *Transaction) QueryRow(query string, args ...any) *sql.Row {
+func (t *Transaction) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
 	return t.tx.QueryRow(query, args...)
 }
 
@@ -104,14 +109,10 @@ func (db *Db) Begin(ctx context.Context) (*Transaction, error) {
 	return &Transaction{tx: tx}, err
 }
 
-func (db *Db) Exec(query string, args ...any) (sql.Result, error) {
-	return db.internal.Exec(query, args...)
-}
-
-func (db *Db) Query(query string, args ...any) (*sql.Rows, error) {
+func (db *Db) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	return db.internal.Query(query, args...)
 }
 
-func (db *Db) QueryRow(query string, args ...any) *sql.Row {
+func (db *Db) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
 	return db.internal.QueryRow(query, args...)
 }
