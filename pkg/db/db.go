@@ -24,33 +24,33 @@ type Queryer interface {
 	QueryRow(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-type Executor interface {
+type Transaction interface {
 	Exec(ctx context.Context, query string, args ...any) (sql.Result, error)
 	Query(ctx context.Context, query string, args ...any) (*sql.Rows, error)
 	QueryRow(ctx context.Context, query string, args ...any) *sql.Row
 }
 
-type Transaction struct {
+type transaction struct {
 	tx *sql.Tx
 }
 
-func (t *Transaction) Rollback() error {
+func (t *transaction) Rollback() error {
 	return t.tx.Rollback()
 }
 
-func (t *Transaction) Commit() error {
+func (t *transaction) Commit() error {
 	return t.tx.Commit()
 }
 
-func (t *Transaction) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
+func (t *transaction) Exec(ctx context.Context, query string, args ...any) (sql.Result, error) {
 	return t.tx.Exec(query, args...)
 }
 
-func (t *Transaction) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
+func (t *transaction) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	return t.tx.Query(query, args...)
 }
 
-func (t *Transaction) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
+func (t *transaction) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
 	return t.tx.QueryRow(query, args...)
 }
 
@@ -104,15 +104,25 @@ CREATE TABLE IF NOT EXISTS task (
 	}
 }
 
-func (db *Db) Begin(ctx context.Context) (*Transaction, error) {
-	tx, err := db.internal.BeginTx(ctx, &sql.TxOptions{})
-	return &Transaction{tx: tx}, err
-}
-
 func (db *Db) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
 	return db.internal.Query(query, args...)
 }
 
 func (db *Db) QueryRow(ctx context.Context, query string, args ...any) *sql.Row {
 	return db.internal.QueryRow(query, args...)
+}
+
+type Callback func(tx Transaction) error
+
+func (db *Db) StartTransaction(ctx context.Context, cb Callback) error {
+	_tx, err := db.internal.BeginTx(ctx, &txOption)
+	if err != nil {
+		return err
+	}
+	defer _tx.Rollback()
+	tx := &transaction{tx: _tx}
+	if err := cb(tx); err != nil {
+		return err
+	}
+	return _tx.Commit()
 }

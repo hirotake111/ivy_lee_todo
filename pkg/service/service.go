@@ -29,34 +29,21 @@ func (s *Service) MakeActionable(ctx context.Context, id int) error {
 		return apperrors.NewTaskExceededError(tl.MaxTskNum())
 	}
 
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
+	return s.db.StartTransaction(ctx, func(tx db.Transaction) error {
+		t, err := s.repo.Find(ctx, tx, id)
+		if err != nil {
+			return err
+		}
+		t.ToActionable()
+		return s.repo.Update(ctx, tx, t)
+	})
 
-	t, err := s.repo.Find(ctx, tx, id)
-	if err != nil {
-		return err
-	}
-	t.ToActionable()
-	if err := s.repo.Update(ctx, tx, t); err != nil {
-		return err
-	}
-
-	return tx.Commit()
 }
 
 func (s *Service) Update(ctx context.Context, t *domain.Task) error {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := s.repo.Update(ctx, tx, t); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.db.StartTransaction(ctx, func(tx db.Transaction) error {
+		return s.repo.Update(ctx, tx, t)
+	})
 }
 
 func (s *Service) Find(ctx context.Context, id int) (*domain.Task, error) {
@@ -68,15 +55,9 @@ func (s *Service) ListPlannedTasks(ctx context.Context) ([]*domain.Task, error) 
 }
 
 func (s *Service) DeleteTask(ctx context.Context, id int) error {
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := s.repo.Delete(ctx, tx, id); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.db.StartTransaction(ctx, func(tx db.Transaction) error {
+		return s.repo.Delete(ctx, tx, id)
+	})
 }
 
 func (s *Service) ListActionableTask(ctx context.Context) (domain.TaskList, error) {
@@ -88,13 +69,7 @@ func (s *Service) AddTask(ctx context.Context, title, description string) error 
 		Title:       title,
 		Description: description,
 	}
-	tx, err := s.db.Begin(ctx)
-	if err != nil {
-		return err
-	}
-	defer tx.Rollback()
-	if err := s.repo.Create(ctx, tx, &req); err != nil {
-		return err
-	}
-	return tx.Commit()
+	return s.db.StartTransaction(ctx, func(tx db.Transaction) error {
+		return s.repo.Create(ctx, tx, &req)
+	})
 }

@@ -27,13 +27,13 @@ func NewSQLiteRepository() *SQLiteRepository {
 }
 
 // Create implements domain.TaskRepository.
-func (s *SQLiteRepository) Create(ctx context.Context, db db.Executor, t *domain.NewTaskRequest) error {
+func (s *SQLiteRepository) Create(ctx context.Context, db db.Transaction, t *domain.NewTaskRequest) error {
 	_, err := db.Exec(ctx, `INSERT INTO task (title, description) VALUES ($1, $2);`, t.Title, t.Description)
 	return err
 }
 
 // Delete implements domain.TaskRepository.
-func (s *SQLiteRepository) Delete(ctx context.Context, db db.Executor, id int) error {
+func (s *SQLiteRepository) Delete(ctx context.Context, db db.Transaction, id int) error {
 	_, err := db.Exec(ctx, `DELETE FROM task WHERE id = $1;`, id)
 	return err
 }
@@ -85,7 +85,7 @@ func (s *SQLiteRepository) ListNonactionable(ctx context.Context, db db.Queryer)
 }
 
 // Update implements domain.TaskRepository.
-func (s *SQLiteRepository) Update(ctx context.Context, db db.Executor, t *domain.Task) error {
+func (s *SQLiteRepository) Update(ctx context.Context, db db.Transaction, t *domain.Task) error {
 	_, err := db.Exec(
 		ctx,
 		"UPDATE task SET title = $1, description = $2, actionable = $3 WHERE id = $4",

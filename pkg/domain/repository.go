@@ -21,10 +21,10 @@ func (t *NewTaskRequest) ToActionableTask(id int) *Task {
 }
 
 type TaskRepository interface {
-	Create(ctx context.Context, db db.Executor, task *NewTaskRequest) error
+	Create(ctx context.Context, db db.Transaction, task *NewTaskRequest) error
 	ListActionable(ctx context.Context, db db.Queryer) (TaskList, error)
 	ListNonactionable(ctx context.Context, db db.Queryer) ([]*Task, error)
 	Find(ctx context.Context, db db.Queryer, id int) (*Task, error)
-	Update(ctx context.Context, db db.Executor, task *Task) error
-	Delete(ctx context.Context, db db.Executor, id int) error
+	Update(ctx context.Context, db db.Transaction, task *Task) error
+	Delete(ctx context.Context, db db.Transaction, id int) error
 }
