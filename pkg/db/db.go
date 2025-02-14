@@ -1,6 +1,7 @@
 package db
 
 import (
+	"context"
 	"database/sql"
 	"log"
 	"os"
@@ -13,6 +14,40 @@ const (
 	appFolderName = "ivy_lee_todo"
 	dbFileName    = "data.db"
 )
+
+var (
+	txOption = sql.TxOptions{}
+)
+
+type Queryer interface {
+	Exec(query string, args ...any) (sql.Result, error)
+	Query(query string, args ...any) (*sql.Rows, error)
+	QueryRow(query string, args ...any) *sql.Row
+}
+
+type Transaction struct {
+	tx *sql.Tx
+}
+
+func (t *Transaction) Rollback() error {
+	return t.tx.Rollback()
+}
+
+func (t *Transaction) Commit() error {
+	return t.tx.Commit()
+}
+
+func (t *Transaction) Exec(query string, args ...any) (sql.Result, error) {
+	return t.tx.Exec(query, args...)
+}
+
+func (t *Transaction) Query(query string, args ...any) (*sql.Rows, error) {
+	return t.tx.Query(query, args...)
+}
+
+func (t *Transaction) QueryRow(query string, args ...any) *sql.Row {
+	return t.tx.QueryRow(query, args...)
+}
 
 type Db struct {
 	internal *sql.DB
@@ -64,12 +99,9 @@ CREATE TABLE IF NOT EXISTS task (
 	}
 }
 
-func (db *Db) Begin() error {
-	return db.Begin()
-}
-
-func (db *Db) Commit() error {
-	return db.Commit()
+func (db *Db) Begin(ctx context.Context) (*Transaction, error) {
+	tx, err := db.internal.BeginTx(ctx, &sql.TxOptions{})
+	return &Transaction{tx: tx}, err
 }
 
 func (db *Db) Exec(query string, args ...any) (sql.Result, error) {

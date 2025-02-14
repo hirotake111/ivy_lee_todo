@@ -3,7 +3,6 @@ package service
 import (
 	"context"
 	"fmt"
-	"log"
 
 	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
 	"github.com/hirotake111/ivy_lee_todo/pkg/db"
@@ -30,13 +29,23 @@ func (s *Service) MakeActionable(ctx context.Context, id int) error {
 	if !tl.CanAddAnother() {
 		return apperrors.NewTaskExceededError(tl.MaxTskNum())
 	}
-	t, err := s.repo.Find(ctx, s.db, id)
-	log.Printf("debug task: %+v\n", t)
+
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return err
+	}
+	defer tx.Rollback()
+
+	t, err := s.repo.Find(ctx, tx, id)
 	if err != nil {
 		return err
 	}
 	t.ToActionable()
-	return s.repo.Update(ctx, s.db, t)
+	if err := s.repo.Update(ctx, tx, t); err != nil {
+		return err
+	}
+
+	return tx.Commit()
 }
 
 func (s *Service) Update(ctx context.Context, t *domain.Task) error {
