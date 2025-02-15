@@ -19,7 +19,7 @@ type MemoryRepository struct {
 }
 
 // ListNonactionable implements domain.TaskRepository.
-func (m *MemoryRepository) ListNonactionable(ctx context.Context, db *db.Db) (ts []*domain.Task, err error) {
+func (m *MemoryRepository) ListNonactionable(ctx context.Context, db db.Queryer) (ts []*domain.Task, err error) {
 	for _, t := range m.tasks {
 		if !t.IsActionable() {
 			ts = append(ts, t)
@@ -35,7 +35,7 @@ func NewMemoryRepository() *MemoryRepository {
 }
 
 // Create implements domain.TaskRepository.
-func (m *MemoryRepository) Create(ctx context.Context, db *db.Db, req *domain.NewTaskRequest) error {
+func (m *MemoryRepository) Create(ctx context.Context, db db.Transaction, req *domain.NewTaskRequest) error {
 	if len(req.Title) == 0 {
 		return errors.New("title can't be empty")
 	}
@@ -46,7 +46,7 @@ func (m *MemoryRepository) Create(ctx context.Context, db *db.Db, req *domain.Ne
 }
 
 // Delete implements domain.TaskRepository.
-func (m *MemoryRepository) Delete(ctx context.Context, db *db.Db, id int) error {
+func (m *MemoryRepository) Delete(ctx context.Context, db db.Transaction, id int) error {
 	var tasks []*domain.Task
 	for _, t := range m.tasks {
 		if t.Id() != id {
@@ -58,7 +58,7 @@ func (m *MemoryRepository) Delete(ctx context.Context, db *db.Db, id int) error 
 }
 
 // Find implements domain.TaskRepository.
-func (m *MemoryRepository) Find(ctx context.Context, db *db.Db, id int) (*domain.Task, error) {
+func (m *MemoryRepository) Find(ctx context.Context, db db.Queryer, id int) (*domain.Task, error) {
 	for _, t := range m.tasks {
 		if t.Id() == id {
 			return t, nil
@@ -68,7 +68,7 @@ func (m *MemoryRepository) Find(ctx context.Context, db *db.Db, id int) (*domain
 }
 
 // List implements domain.TaskRepository.
-func (m *MemoryRepository) ListActionable(ctx context.Context, db *db.Db) (tl domain.TaskList, err error) {
+func (m *MemoryRepository) ListActionable(ctx context.Context, db db.Queryer) (tl domain.TaskList, err error) {
 	for _, t := range m.tasks {
 		if t.IsActionable() {
 			tl = append(tl, t)
@@ -78,17 +78,13 @@ func (m *MemoryRepository) ListActionable(ctx context.Context, db *db.Db) (tl do
 }
 
 // Update implements domain.TaskRepository.
-func (m *MemoryRepository) Update(ctx context.Context, db *db.Db, task *domain.Task) error {
+func (m *MemoryRepository) Update(ctx context.Context, db db.Transaction, task *domain.Task) error {
 	for i, t := range m.tasks {
 		if t.Id() == task.Id() {
 			m.tasks[i] = task
 		}
 	}
 	return nil
-}
-
-func (m *MemoryRepository) len() int {
-	return len(m.tasks)
 }
 
 func (m MemoryRepository) debug() {
