@@ -21,7 +21,7 @@ func NewService(db *db.Db, repo domain.TaskRepository) *Service {
 }
 
 func (s *Service) MakeActionable(ctx context.Context, id int) error {
-	tl, err := s.repo.ListActionable(ctx, s.db)
+	tl, err := s.repo.List(ctx, s.db)
 	if err != nil {
 		return err
 	}
@@ -51,17 +51,19 @@ func (s *Service) Find(ctx context.Context, id int) (*domain.Task, error) {
 }
 
 func (s *Service) ListPlannedTasks(ctx context.Context) ([]*domain.Task, error) {
-	return s.repo.ListNonactionable(ctx, s.db)
+	l, err := s.repo.List(ctx, s.db)
+	return l.PlannedTasks(), err
+}
+
+func (s *Service) ListActionableTask(ctx context.Context) (domain.TaskList, error) {
+	l, err := s.repo.List(ctx, s.db)
+	return l.ActionableTasks(), err
 }
 
 func (s *Service) DeleteTask(ctx context.Context, id int) error {
 	return s.db.StartTransaction(ctx, func(tx db.Transaction) error {
 		return s.repo.Delete(ctx, tx, id)
 	})
-}
-
-func (s *Service) ListActionableTask(ctx context.Context) (domain.TaskList, error) {
-	return s.repo.ListActionable(ctx, s.db)
 }
 
 func (s *Service) AddTask(ctx context.Context, title, description string) error {

@@ -14,10 +14,11 @@ type taskDto struct {
 	Id          int
 	Title       string
 	Description string
+	Actionable  bool
 }
 
 func (t taskDto) toTask() *domain.Task {
-	return domain.NewTask(t.Id, t.Title, t.Description)
+	return domain.NewTask(t.Id, t.Title, t.Description, t.Actionable)
 }
 
 type SQLiteRepository struct{}
@@ -40,17 +41,17 @@ func (s *SQLiteRepository) Delete(ctx context.Context, db db.Transaction, id int
 
 // Find implements domain.TaskRepository.
 func (s *SQLiteRepository) Find(ctx context.Context, db db.Queryer, id int) (*domain.Task, error) {
-	row := db.QueryRow(ctx, "SELECT id, title, description FROM task WHERE id = $1 and deleted_at is null", id)
+	row := db.QueryRow(ctx, "SELECT id, title, description, actionable FROM task WHERE id = $1 and deleted_at is null", id)
 	var t taskDto
-	if err := row.Scan(&t.Id, &t.Title, &t.Description); err != nil {
+	if err := row.Scan(&t.Id, &t.Title, &t.Description, &t.Actionable); err != nil {
 		return nil, apperrors.NotFound
 	}
 	return t.toTask(), nil
 }
 
-// ListActionable implements domain.TaskRepository.
-func (s *SQLiteRepository) ListActionable(ctx context.Context, db db.Queryer) (domain.TaskList, error) {
-	rows, err := db.Query(ctx, "SELECT id, title, description FROM task WHERE actionable = 1 and deleted_at is null")
+// List implements domain.TaskRepository.
+func (s *SQLiteRepository) List(ctx context.Context, db db.Queryer) (domain.TaskList, error) {
+	rows, err := db.Query(ctx, "SELECT id, title, description, actionable FROM task WHERE deleted_at is null")
 	if err != nil {
 		return nil, err
 	}
@@ -58,25 +59,7 @@ func (s *SQLiteRepository) ListActionable(ctx context.Context, db db.Queryer) (d
 	var l domain.TaskList
 	for rows.Next() {
 		var t taskDto
-		if err := rows.Scan(&t.Id, &t.Title, &t.Description); err != nil {
-			return nil, err
-		}
-		l = append(l, t.toTask())
-	}
-	return l, nil
-}
-
-// ListNonactionable implements domain.TaskRepository.
-func (s *SQLiteRepository) ListNonactionable(ctx context.Context, db db.Queryer) ([]*domain.Task, error) {
-	rows, err := db.Query(ctx, "SELECT id, title, description FROM task WHERE actionable = 0 and deleted_at is null")
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var l domain.TaskList
-	for rows.Next() {
-		var t taskDto
-		if err := rows.Scan(&t.Id, &t.Title, &t.Description); err != nil {
+		if err := rows.Scan(&t.Id, &t.Title, &t.Description, &t.Actionable); err != nil {
 			return nil, err
 		}
 		l = append(l, t.toTask())

@@ -68,13 +68,8 @@ func (m *MemoryRepository) Find(ctx context.Context, db db.Queryer, id int) (*do
 }
 
 // List implements domain.TaskRepository.
-func (m *MemoryRepository) ListActionable(ctx context.Context, db db.Queryer) (tl domain.TaskList, err error) {
-	for _, t := range m.tasks {
-		if t.IsActionable() {
-			tl = append(tl, t)
-		}
-	}
-	return
+func (m *MemoryRepository) List(ctx context.Context, db db.Queryer) (domain.TaskList, error) {
+	return domain.NewTaskList(m.tasks), nil
 }
 
 // Update implements domain.TaskRepository.

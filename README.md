@@ -11,4 +11,5 @@ Ivy Lee Method Todo App
 - [x] limit the number of actionable tasks to 6
 - [x] sqlite implementation, or store data into a file
 - [x] add transaction
+- [ ] implement TUI
 - [ ] move help message to service

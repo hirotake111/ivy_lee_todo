@@ -7,12 +7,12 @@ type Task struct {
 	actionable  bool
 }
 
-func NewTask(id int, title, description string) *Task {
+func NewTask(id int, title, description string, actionable bool) *Task {
 	return &Task{
 		id:          id,
 		title:       title,
 		description: description,
-		actionable:  false,
+		actionable:  actionable,
 	}
 }
 
