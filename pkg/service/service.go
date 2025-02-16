@@ -75,3 +75,7 @@ func (s *Service) AddTask(ctx context.Context, title, description string) error 
 		return s.repo.Create(ctx, tx, &req)
 	})
 }
+
+func (s *Service) CloseDatabase() error {
+	return s.db.Close()
+}

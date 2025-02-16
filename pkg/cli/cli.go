@@ -47,16 +47,20 @@ LOOP:
 			break
 		}
 		switch cmd {
+
 		case "l":
 			displayedPlanned = true
+
 		case "a":
 			if err := c.add(ctx); err != nil {
 				fmt.Printf("Error adding a new task: %s\n", err)
 			}
+
 		case "d":
 			if err := c.delete(ctx); err != nil {
 				fmt.Printf("\nError deleting a new task: %s\n", err)
 			}
+
 		case "m":
 			if err := c.makeActionable(ctx); err != nil {
 				var exceededErr apperrors.TaskNumbersExceededError
@@ -67,12 +71,15 @@ LOOP:
 				}
 			}
 		case "q":
-			fmt.Println("Quitting program...")
 			break LOOP
+
 		default:
 			fmt.Println("")
 		}
 	}
+
+	fmt.Println("Quitting program...")
+	c.service.CloseDatabase()
 	return nil
 }
 

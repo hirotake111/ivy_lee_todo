@@ -25,9 +25,8 @@ type Queryer interface {
 }
 
 type Transaction interface {
+	Queryer
 	Exec(ctx context.Context, query string, args ...any) (sql.Result, error)
-	Query(ctx context.Context, query string, args ...any) (*sql.Rows, error)
-	QueryRow(ctx context.Context, query string, args ...any) *sql.Row
 }
 
 type transaction struct {
@@ -102,6 +101,10 @@ CREATE TABLE IF NOT EXISTS task (
 	if _, err := db.Exec(stmt); err != nil {
 		log.Fatal(err)
 	}
+}
+
+func (db *Db) Close() error {
+	return db.internal.Close()
 }
 
 func (db *Db) Query(ctx context.Context, query string, args ...any) (*sql.Rows, error) {
