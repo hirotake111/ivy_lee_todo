@@ -1,6 +1,7 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"math"
 	"strconv"
@@ -10,6 +11,10 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fogleman/ease"
+	"github.com/hirotake111/ivy_lee_todo/pkg/db"
+	"github.com/hirotake111/ivy_lee_todo/pkg/domain"
+	"github.com/hirotake111/ivy_lee_todo/pkg/repository"
+	"github.com/hirotake111/ivy_lee_todo/pkg/service"
 	"github.com/lucasb-eyer/go-colorful"
 )
 
@@ -35,22 +40,19 @@ var (
 )
 
 func main() {
-	initialModel := model{
-		Choice:   0,
-		Chosen:   false,
-		Ticks:    10,
-		Frames:   0,
-		Progress: 0,
-		Loaded:   false,
-		Quitting: false,
-	}
-	p := tea.NewProgram(initialModel)
+	ctx := context.Background()
+	db := db.NewSqlite3Db(false)
+	r := repository.NewSQLiteRepository()
+	s := service.NewService(db, r)
+	m := initializeModel(ctx, s)
+	p := tea.NewProgram(m)
 	if _, err := p.Run(); err != nil {
 		fmt.Printf("Couldn't start program: %s\n", err)
 	}
 }
 
 type model struct {
+	ctx      context.Context
 	Choice   int
 	Chosen   bool
 	Ticks    int
@@ -58,23 +60,50 @@ type model struct {
 	Progress float64
 	Loaded   bool
 	Quitting bool
+	TaskList domain.TaskList
+	service  *service.Service
+}
+
+func initializeModel(ctx context.Context, service *service.Service) model {
+	return model{
+		Choice:   0,
+		Chosen:   false,
+		Ticks:    10,
+		Frames:   0,
+		Progress: 0,
+		Loaded:   false,
+		Quitting: false,
+		ctx:      ctx,
+		service:  service,
+	}
+
 }
 
 // Init implements tea.Model.
 func (m model) Init() tea.Cmd {
-	return tick()
+	return func() tea.Msg {
+		l, err := m.service.ListActionableTask(m.ctx)
+		if err != nil {
+			panic(err)
+		}
+		return activeListMsg{tasks: l}
+	}
 }
 
 // Update implements tea.Model.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	// Make sure these keys always quit
-	if msg, ok := msg.(tea.KeyMsg); ok {
-		k := msg.String()
-		if k == "q" || k == "esc" || k == "ctrl+c" {
+	switch msg := msg.(type) {
+	case tea.KeyMsg:
+		switch msg.Type {
+		case tea.KeyCtrlC, tea.KeyEsc, tea.KeyCtrlQ:
 			m.Quitting = true
 			return m, tea.Quit
 		}
+	case activeListMsg:
+		m.TaskList = msg.tasks
+		return m, nil
 	}
+
 	// Hand off the message and model to the appropriate update function for the
 	// appropriate view based on the current state.
 	if !m.Chosen {
@@ -132,33 +161,34 @@ func progressbar(percent float64) string {
 // The first view, where you're choosing a task
 func choicesView(m model) string {
 	c := m.Choice
-	tpl := "What to do today?\n\n"
+	tpl := "TODOs\n\n"
 	tpl += "%s\n\n"
-	tpl += "Program quits in %s seconds\n\n"
 	tpl += subtleStyle.Render("j/k, up/down: select") + dotStyle +
 		subtleStyle.Render("enter: choose") + dotStyle +
 		subtleStyle.Render("q, esc: quit")
-	choices := fmt.Sprintf(
-		"%s\n%s\n%s\n%s",
-		checkbox("Plant carrots", c == 0),
-		checkbox("Go to the market", c == 1),
-		checkbox("Read something", c == 2),
-		checkbox("See friends", c == 3),
-	)
-	return fmt.Sprintf(tpl, choices, ticksStyle.Render(strconv.Itoa(m.Ticks)))
+	var choices strings.Builder
+	for i, t := range m.TaskList.ActionableTasks() {
+		cb := checkbox(t.Title(), c == i)
+		choices.WriteString(fmt.Sprintf("%s\n", cb))
+	}
+	return fmt.Sprintf(tpl, choices.String())
 }
 
 func checkbox(label string, checked bool) string {
 	if checked {
-		return checkboxStyle.Render("[x] " + label)
+		return checkboxStyle.Render("[x] -" + label)
 	}
-	return fmt.Sprintf("[ ] %s", label)
+	return fmt.Sprintf("[ ] -%s", label)
 }
 
 type (
 	tickMsg  struct{}
 	frameMsg struct{}
 )
+
+type activeListMsg struct {
+	tasks domain.TaskList
+}
 
 func tick() tea.Cmd {
 	return tea.Tick(time.Second, func(t time.Time) tea.Msg {
@@ -234,7 +264,7 @@ func updateChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
-			m.Choice = min(m.Choice+1, 3)
+			m.Choice = min(m.Choice+1, len(m.TaskList.ActionableTasks())-1)
 		case "k", "up":
 			m.Choice = max(m.Choice-1, 0)
 		case "enter":
@@ -265,3 +295,11 @@ func max(a, b int) int {
 	}
 	return b
 }
+
+type item struct {
+	title       string
+	description string
+}
+
+func (i item) Title() string       { return i.title }
+func (i item) Description() string { return i.description }
