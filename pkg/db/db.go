@@ -61,24 +61,24 @@ type Db struct {
 //
 // When `initDb` variable is true, then the database file will be always deleted and recreated.
 func NewSqlite3Db(initialize bool) *Db {
-	log.Println("Initializing SQLite3 database")
+	// log.Println("Initializing SQLite3 database")
 	p, err := os.UserCacheDir()
 	if err != nil {
 		log.Fatal(err)
 	}
 	p = filepath.Join(p, appFolderName)
 	if _, err := os.Stat(p); err != nil {
-		log.Println("Creating app dir in a cache folder")
+		// log.Println("Creating app dir in a cache folder")
 		if err = os.Mkdir(p, 0755); err != nil {
 			log.Fatal(err)
 		}
 	}
 	p = filepath.Join(p, dbFileName)
 	if initialize {
-		log.Println("Deleting a database file")
+		// log.Println("Deleting a database file")
 		os.Remove(p)
 	}
-	log.Println("Loading a database file in the app folder")
+	// log.Println("Loading a database file in the app folder")
 	db, err := sql.Open("sqlite3", p)
 	if err != nil {
 		log.Fatal(err)
@@ -88,7 +88,7 @@ func NewSqlite3Db(initialize bool) *Db {
 }
 
 func initSchema(db *sql.DB) {
-	log.Println("Creating tables if not exists")
+	// log.Println("Creating tables if not exists")
 	stmt := `
 CREATE TABLE IF NOT EXISTS task (
 	id INTEGER PRIMARY KEY AUTOINCREMENT, -- ID
