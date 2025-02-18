@@ -37,3 +37,9 @@ func (t *Task) ToActionable() *Task {
 	t.actionable = true
 	return t
 }
+
+// ToPlanned turns the task itself into planned one
+func (t *Task) ToPlanned() *Task {
+	t.actionable = false
+	return t
+}

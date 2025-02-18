@@ -88,11 +88,11 @@ func initializeModel(ctx context.Context, service *service.Service) model {
 
 // Init implements tea.Model.
 func (m model) Init() tea.Cmd {
-	return m.fetchTaskListCmd
+	return m.fetchTaskList
 }
 
-// fetchTaskListCmd is a command that fetches a task list out of storage
-func (m model) fetchTaskListCmd() tea.Msg {
+// fetchTaskList retrieves a list of tasks and returns ListMsg
+func (m model) fetchTaskList() tea.Msg {
 	l, err := m.service.List(m.ctx)
 	if err != nil {
 		panic(err)
@@ -100,37 +100,90 @@ func (m model) fetchTaskListCmd() tea.Msg {
 	return ListMsg{tasks: l}
 }
 
+// updateTask updates a task and fetches the latest task list
+func (m model) updateTask(task *domain.Task) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.service.Update(m.ctx, task); err != nil {
+			return errMsg{err: err}
+		}
+		return m.fetchTaskList()
+	}
+}
+
 // Update implements tea.Model.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q", "esc":
-			m.Quitting = true
-			return m, tea.Quit
+	switch m.displayMode {
 
-		// Switch actionable tasks and planned tasks
-		case "r":
-			m.Choice = 0 // reset choice index
-			if m.displayMode == actionableListMode {
+	// actionable list displayMode
+	case actionableListMode:
+		switch msg := msg.(type) {
+		// Triggered by a key stroke
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "ctrl+c", "q", "esc":
+				m.Quitting = true
+				return m, tea.Quit
+
+			// Switch actionable list mode to planned list mode
+			case "r":
+				m.Choice = 0 // Reset choice index
 				m.displayMode = plannedListMode
-			} else if m.displayMode == plannedListMode {
-				m.displayMode = actionableListMode
-			} else {
-				panic(fmt.Sprintf("invalid display mode: %d", m.displayMode))
+				return m, nil
+
+			case "m":
+				m.Choice = 0 // Reset choice index
+				t := m.TaskList.ActionableTasks()[m.Choice]
+				return m, m.updateTask(t.ToPlanned())
 			}
+
+		// Triggered by a new task list
+		case ListMsg:
+			m.TaskList = msg.tasks
 			return m, nil
 		}
 
-	case ListMsg:
-		m.TaskList = msg.tasks
-		return m, nil
-	}
+		// Hand off the message and model to the appropriate update function for the
+		// appropriate view based on the current state.
+		if !m.Chosen {
+			return updateChoices(msg, m)
+		}
 
-	// Hand off the message and model to the appropriate update function for the
-	// appropriate view based on the current state.
-	if !m.Chosen {
-		return updateChoices(msg, m)
+		// planned list displayMode
+	case plannedListMode:
+		switch msg := msg.(type) {
+
+		// Triggered by a key stroke
+		case tea.KeyMsg:
+			switch msg.String() {
+			case "ctrl+c", "q", "esc":
+				m.Quitting = true
+				return m, tea.Quit
+
+			// Switch planed list mode to actionable list mode
+			case "r":
+				m.Choice = 0 // Reset choice index
+				m.displayMode = actionableListMode
+				return m, nil
+
+			// Make planned task into actionable one
+			case " ":
+				t := m.TaskList.PlannedTasks()[m.Choice]
+				m.Choice = 0 // Resent choice index
+				m.displayMode = actionableListMode
+				return m, m.updateTask(t.ToActionable())
+			}
+
+		// Triggered by a new task list
+		case ListMsg:
+			m.TaskList = msg.tasks
+			return m, nil
+		}
+
+		// Hand off the message and model to the appropriate update function for the
+		// appropriate view based on the current state.
+		if !m.Chosen {
+			return updateChoices(msg, m)
+		}
 	}
 	return updateChosen(msg, m)
 }
@@ -197,15 +250,26 @@ func choicesView(m model) string {
 		tpl = fmt.Sprintf("Planned Tasks (%d/%d)\n\n", len(tasks), len(m.TaskList))
 	}
 	tpl += "%s\n\n"
-	tpl += subtleStyle.Render("j/k, up/down: select") + dotStyle +
-		subtleStyle.Render("enter: choose") + dotStyle +
-		subtleStyle.Render("q, esc: quit")
+	tpl += helpMessage(&m)
 	var choices strings.Builder
 	for i, t := range tasks {
 		cb := checkbox(t.Title(), c == i)
 		choices.WriteString(fmt.Sprintf("%s\n", cb))
 	}
 	return fmt.Sprintf(tpl, choices.String())
+}
+
+func helpMessage(m *model) string {
+	vertical := subtleStyle.Render("j/k, up/down: select") + dotStyle
+	edit := subtleStyle.Render("e: edit") + dotStyle
+	actionable := subtleStyle.Render("m: make it actionable") + dotStyle
+	done := subtleStyle.Render("d: done") + dotStyle
+	del := subtleStyle.Render("d: delete") + dotStyle
+	quit := subtleStyle.Render("q, esc: quit")
+	if m.displayMode == actionableListMode {
+		return vertical + edit + done + quit
+	}
+	return vertical + actionable + edit + del + quit
 }
 
 func checkbox(label string, checked bool) string {
@@ -222,6 +286,15 @@ type (
 
 type ListMsg struct {
 	tasks domain.TaskList
+}
+
+// errMsg is a message that contains an error in it.
+type errMsg struct {
+	err error
+}
+
+func (e errMsg) Error() string {
+	return e.err.Error()
 }
 
 func tick() tea.Cmd {
