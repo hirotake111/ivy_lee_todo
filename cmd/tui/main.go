@@ -8,6 +8,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/charmbracelet/bubbles/cursor"
+	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fogleman/ease"
@@ -29,6 +31,8 @@ const (
 
 	actionableListMode displayMode = iota
 	plannedListMode
+	newTaskMode
+	editTaskMode
 )
 
 // General stuff for styling the view
@@ -60,17 +64,20 @@ func main() {
 
 type model struct {
 	ctx         context.Context
-	Choice      int              // Index of the item cursor is currently pointing to
-	Chosen      bool             // Whether the item is chosen or not
-	Ticks       int              // Tick!
-	Frames      int              // Frames?
-	Progress    float64          // not neccessary
-	Loaded      bool             // Whether it's loaded
-	Quitting    bool             // Is the program quitting now?
-	TaskList    domain.TaskList  // This includes both planned and actionable tasks. You can get either through receiver methods
-	service     *service.Service // service object
-	displayMode displayMode      // Whether it's showing the list of actionable tasks
-	err         error            // An error message
+	Choice      int               // Index of the item cursor is currently pointing to
+	Chosen      bool              // Whether the item is chosen or not
+	Ticks       int               // Tick!
+	Frames      int               // Frames?
+	Progress    float64           // not neccessary
+	Loaded      bool              // Whether it's loaded
+	Quitting    bool              // Is the program quitting now?
+	TaskList    domain.TaskList   // This includes both planned and actionable tasks. You can get either through receiver methods
+	service     *service.Service  // service object
+	displayMode displayMode       // Whether it's showing the list of actionable tasks
+	err         error             // An error message
+	cursor      cursor.Mode       // Behavior of the cursor (not neccessary?)
+	inputIndex  int               // Index of the text input fields
+	inputs      []textinput.Model // text input fields
 }
 
 func initializeModel(ctx context.Context, service *service.Service) model {
@@ -157,49 +164,12 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// actionable list displayMode
 	case actionableListMode:
-		switch msg := msg.(type) {
-		// Triggered by a key stroke
-		case tea.KeyMsg:
-			switch msg.String() {
-			case "ctrl+c", "q", "esc":
-				m.Quitting = true
-				return m, tea.Quit
-
-			// Switch actionable list mode to planned list mode
-			case "s":
-				m.Choice = 0 // Reset choice index
-				m.displayMode = plannedListMode
-				return m, nil
-
-			// turn the selected task into planned one
-			case "m":
-				m.Choice = 0 // Reset choice index
-				t := m.TaskList.ActionableTasks()[m.Choice]
-				return m, m.updateTask(t.ToPlanned())
-			// complete the selected task
-			case " ":
-				t := m.TaskList.ActionableTasks()[m.Choice]
-				return m, m.completeTask(t)
-			}
-
-		// Triggered by a new task list
-		case ListMsg:
-			m.TaskList = msg.tasks
-			return m, nil
-
-		// Triggered by error message
-		case errMsg:
-			m.err = msg
-		}
-
-		// Hand off the message and model to the appropriate update function for the
-		// appropriate view based on the current state.
-		if !m.Chosen {
-			return updateChoices(msg, m)
-		}
+		return updateWithActionableListMode(msg, m)
 
 	// planned list displayMode
 	case plannedListMode:
+		return updateWithPlannedlistMode(msg, m)
+	case newTaskMode, editTaskMode:
 		switch msg := msg.(type) {
 
 		// Triggered by a key stroke
@@ -208,40 +178,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case "ctrl+c", "q", "esc":
 				m.Quitting = true
 				return m, tea.Quit
-
-			// Switch planed list mode to actionable list mode
-			case "s":
-				m.Choice = 0 // Reset choice index
-				m.displayMode = actionableListMode
-				return m, nil
-
-			// Turn selected planned task into actionable
-			case " ":
-				t := m.TaskList.PlannedTasks()[m.Choice]
-				return m, m.makeActionable(t)
-
-			// Delete a selected task
-			case "d":
-				t := m.TaskList.PlannedTasks()[m.Choice]
-				return m, m.deleteTask(t)
 			}
-
-		// Triggered by a new task list
-		case ListMsg:
-			m.TaskList = msg.tasks
-			return m, nil
-
-		// Triggered by error message
-		case errMsg:
-			m.err = msg
 		}
 
-		// Hand off the message and model to the appropriate update function for the
-		// appropriate view based on the current state.
-		if !m.Chosen {
-			return updateChoices(msg, m)
-		}
 	}
+
 	return updateChosen(msg, m)
 }
 
@@ -476,3 +417,97 @@ type item struct {
 
 func (i item) Title() string       { return i.title }
 func (i item) Description() string { return i.description }
+
+func updateWithActionableListMode(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+	// Triggered by a key stroke
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.Quitting = true
+			return m, tea.Quit
+
+		// Switch actionable list mode to planned list mode
+		case "s":
+			m.Choice = 0 // Reset choice index
+			m.displayMode = plannedListMode
+			return m, nil
+
+		// turn the selected task into planned one
+		case "m":
+			m.Choice = 0 // Reset choice index
+			t := m.TaskList.ActionableTasks()[m.Choice]
+			return m, m.updateTask(t.ToPlanned())
+		// complete the selected task
+		case " ":
+			t := m.TaskList.ActionableTasks()[m.Choice]
+			return m, m.completeTask(t)
+		}
+
+	// Triggered by a new task list
+	case ListMsg:
+		m.TaskList = msg.tasks
+		return m, nil
+
+	// Triggered by error message
+	case errMsg:
+		m.err = msg
+	}
+
+	// Hand off the message and model to the appropriate update function for the
+	// appropriate view based on the current state.
+	if !m.Chosen {
+		return updateChoices(msg, m)
+	}
+	return updateChosen(msg, m)
+}
+
+func updateWithPlannedlistMode(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
+	switch msg := msg.(type) {
+
+	// Triggered by a key stroke
+	case tea.KeyMsg:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
+			m.Quitting = true
+			return m, tea.Quit
+
+		// Switch planed list mode to actionable list mode
+		case "s":
+			m.Choice = 0 // Reset choice index
+			m.displayMode = actionableListMode
+			return m, nil
+
+		// Turn selected planned task into actionable
+		case " ":
+			t := m.TaskList.PlannedTasks()[m.Choice]
+			return m, m.makeActionable(t)
+
+		// New task mode
+		case "a":
+			m.displayMode = newTaskMode
+			return m, nil
+
+		// Delete a selected task
+		case "d":
+			t := m.TaskList.PlannedTasks()[m.Choice]
+			return m, m.deleteTask(t)
+		}
+
+	// Triggered by a new task list
+	case ListMsg:
+		m.TaskList = msg.tasks
+		return m, nil
+
+	// Triggered by error message
+	case errMsg:
+		m.err = msg
+	}
+
+	// Hand off the message and model to the appropriate update function for the
+	// appropriate view based on the current state.
+	if !m.Chosen {
+		return updateChoices(msg, m)
+	}
+	return updateChosen(msg, m)
+}
