@@ -92,7 +92,7 @@ func (m model) fetchTaskListCmd() tea.Msg {
 	if err != nil {
 		panic(err)
 	}
-	return activeListMsg{tasks: l}
+	return ListMsg{tasks: l}
 }
 
 // Update implements tea.Model.
@@ -110,7 +110,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, nil
 		}
 
-	case activeListMsg:
+	case ListMsg:
 		m.TaskList = msg.tasks
 		return m, nil
 	}
@@ -208,7 +208,7 @@ type (
 	frameMsg struct{}
 )
 
-type activeListMsg struct {
+type ListMsg struct {
 	tasks domain.TaskList
 }
 

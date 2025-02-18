@@ -12,4 +12,9 @@ Ivy Lee Method Todo App
 - [x] sqlite implementation, or store data into a file
 - [x] add transaction
 - [ ] implement TUI
+  - [x] list tasks
+  - [ ] add a new planned task
+  - [ ] move a task from planned to actionable
+  - [ ] update a task (title, description)
+  - [ ] delete/complete a task
 - [ ] move help message to service
