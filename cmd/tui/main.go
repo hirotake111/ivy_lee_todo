@@ -18,11 +18,16 @@ import (
 	"github.com/lucasb-eyer/go-colorful"
 )
 
+type displayMode int
+
 const (
 	progressBarWidth  = 71
 	progressFullChar  = "█"
 	progressEmptyChar = "░"
 	dotChar           = " • "
+
+	actionableListMode displayMode = iota
+	plannedListMode
 )
 
 // General stuff for styling the view
@@ -52,31 +57,31 @@ func main() {
 }
 
 type model struct {
-	ctx            context.Context
-	Choice         int
-	Chosen         bool
-	Ticks          int
-	Frames         int
-	Progress       float64
-	Loaded         bool
-	Quitting       bool
-	TaskList       domain.TaskList
-	service        *service.Service
-	showActionable bool // Whether it's showing the list of actionable tasks
+	ctx         context.Context
+	Choice      int              // Index of the item cursor is currently pointing to
+	Chosen      bool             // Whether the item is chosen or not
+	Ticks       int              // Tick!
+	Frames      int              // Frames?
+	Progress    float64          // not neccessary
+	Loaded      bool             // Whether it's loaded
+	Quitting    bool             // Is the program quitting now?
+	TaskList    domain.TaskList  // This includes both planned and actionable tasks. You can get either through receiver methods
+	service     *service.Service // service object
+	displayMode displayMode      // Whether it's showing the list of actionable tasks
 }
 
 func initializeModel(ctx context.Context, service *service.Service) model {
 	return model{
-		Choice:         0,
-		Chosen:         false,
-		Ticks:          10,
-		Frames:         0,
-		Progress:       0,
-		Loaded:         false,
-		Quitting:       false,
-		ctx:            ctx,
-		service:        service,
-		showActionable: true,
+		Choice:      0,
+		Chosen:      false,
+		Ticks:       10,
+		Frames:      0,
+		Progress:    0,
+		Loaded:      false,
+		Quitting:    false,
+		ctx:         ctx,
+		service:     service,
+		displayMode: actionableListMode,
 	}
 
 }
@@ -106,7 +111,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Switch actionable tasks and planned tasks
 		case "r":
-			m.showActionable = !m.showActionable
+			m.Choice = 0 // reset choice index
+			if m.displayMode == actionableListMode {
+				m.displayMode = plannedListMode
+			} else if m.displayMode == plannedListMode {
+				m.displayMode = actionableListMode
+			} else {
+				panic(fmt.Sprintf("invalid display mode: %d", m.displayMode))
+			}
 			return m, nil
 		}
 
@@ -173,15 +185,15 @@ func progressbar(percent float64) string {
 func choicesView(m model) string {
 	c := m.Choice
 	var tasks []*domain.Task
-	if m.showActionable {
+	if m.displayMode == actionableListMode {
 		tasks = m.TaskList.ActionableTasks()
-	} else {
+	} else if m.displayMode == plannedListMode {
 		tasks = m.TaskList.PlannedTasks()
 	}
 	var tpl string
-	if m.showActionable {
+	if m.displayMode == actionableListMode {
 		tpl = fmt.Sprintf("TODOs (%d/%d)\n\n", len(tasks), len(m.TaskList))
-	} else {
+	} else if m.displayMode == plannedListMode {
 		tpl = fmt.Sprintf("Planned Tasks (%d/%d)\n\n", len(tasks), len(m.TaskList))
 	}
 	tpl += "%s\n\n"
@@ -282,11 +294,15 @@ func updateChosen(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 
 // Update loop for the first view where you're choosing a task
 func updateChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
+	l := len(m.TaskList.ActionableTasks())
+	if m.displayMode == plannedListMode {
+		l = len(m.TaskList.PlannedTasks())
+	}
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
 		switch msg.String() {
 		case "j", "down":
-			m.Choice = min(m.Choice+1, len(m.TaskList.ActionableTasks())-1)
+			m.Choice = min(m.Choice+1, l-1)
 		case "k", "up":
 			m.Choice = max(m.Choice-1, 0)
 		case "enter":
