@@ -50,6 +50,10 @@ func (s *Service) Find(ctx context.Context, id int) (*domain.Task, error) {
 	return s.repo.Find(ctx, s.db, id)
 }
 
+func (s *Service) List(ctx context.Context) (domain.TaskList, error) {
+	return s.repo.List(ctx, s.db)
+}
+
 func (s *Service) ListPlannedTasks(ctx context.Context) ([]*domain.Task, error) {
 	l, err := s.repo.List(ctx, s.db)
 	return l.PlannedTasks(), err

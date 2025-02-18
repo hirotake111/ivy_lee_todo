@@ -52,53 +52,64 @@ func main() {
 }
 
 type model struct {
-	ctx      context.Context
-	Choice   int
-	Chosen   bool
-	Ticks    int
-	Frames   int
-	Progress float64
-	Loaded   bool
-	Quitting bool
-	TaskList domain.TaskList
-	service  *service.Service
+	ctx            context.Context
+	Choice         int
+	Chosen         bool
+	Ticks          int
+	Frames         int
+	Progress       float64
+	Loaded         bool
+	Quitting       bool
+	TaskList       domain.TaskList
+	service        *service.Service
+	showActionable bool // Whether it's showing the list of actionable tasks
 }
 
 func initializeModel(ctx context.Context, service *service.Service) model {
 	return model{
-		Choice:   0,
-		Chosen:   false,
-		Ticks:    10,
-		Frames:   0,
-		Progress: 0,
-		Loaded:   false,
-		Quitting: false,
-		ctx:      ctx,
-		service:  service,
+		Choice:         0,
+		Chosen:         false,
+		Ticks:          10,
+		Frames:         0,
+		Progress:       0,
+		Loaded:         false,
+		Quitting:       false,
+		ctx:            ctx,
+		service:        service,
+		showActionable: true,
 	}
 
 }
 
 // Init implements tea.Model.
 func (m model) Init() tea.Cmd {
-	return func() tea.Msg {
-		l, err := m.service.ListActionableTask(m.ctx)
-		if err != nil {
-			panic(err)
-		}
-		return activeListMsg{tasks: l}
+	return m.fetchTaskListCmd
+}
+
+// fetchTaskListCmd is a command that fetches a task list out of storage
+func (m model) fetchTaskListCmd() tea.Msg {
+	l, err := m.service.List(m.ctx)
+	if err != nil {
+		panic(err)
 	}
+	return activeListMsg{tasks: l}
 }
 
 // Update implements tea.Model.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.KeyMsg:
-		switch msg.Type {
-		case tea.KeyCtrlC, tea.KeyEsc, tea.KeyCtrlQ:
+		switch msg.String() {
+		case "ctrl+c", "q", "esc":
 			m.Quitting = true
 			return m, tea.Quit
+
+		// Switch actionable tasks and planned tasks
+		case "r":
+			m.showActionable = !m.showActionable
+			return m, nil
 		}
+
 	case activeListMsg:
 		m.TaskList = msg.tasks
 		return m, nil
@@ -161,13 +172,24 @@ func progressbar(percent float64) string {
 // The first view, where you're choosing a task
 func choicesView(m model) string {
 	c := m.Choice
-	tpl := "TODOs\n\n"
+	var tasks []*domain.Task
+	if m.showActionable {
+		tasks = m.TaskList.ActionableTasks()
+	} else {
+		tasks = m.TaskList.PlannedTasks()
+	}
+	var tpl string
+	if m.showActionable {
+		tpl = fmt.Sprintf("TODOs (%d/%d)\n\n", len(tasks), len(m.TaskList))
+	} else {
+		tpl = fmt.Sprintf("Planned Tasks (%d/%d)\n\n", len(tasks), len(m.TaskList))
+	}
 	tpl += "%s\n\n"
 	tpl += subtleStyle.Render("j/k, up/down: select") + dotStyle +
 		subtleStyle.Render("enter: choose") + dotStyle +
 		subtleStyle.Render("q, esc: quit")
 	var choices strings.Builder
-	for i, t := range m.TaskList.ActionableTasks() {
+	for i, t := range tasks {
 		cb := checkbox(t.Title(), c == i)
 		choices.WriteString(fmt.Sprintf("%s\n", cb))
 	}
