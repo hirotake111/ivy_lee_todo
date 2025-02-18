@@ -11,6 +11,7 @@ import (
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
 	"github.com/fogleman/ease"
+	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
 	"github.com/hirotake111/ivy_lee_todo/pkg/db"
 	"github.com/hirotake111/ivy_lee_todo/pkg/domain"
 	"github.com/hirotake111/ivy_lee_todo/pkg/repository"
@@ -39,6 +40,7 @@ var (
 	progressEmpty = subtleStyle.Render(progressEmptyChar)
 	dotStyle      = lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(dotChar)
 	mainStyle     = lipgloss.NewStyle().MarginLeft(2)
+	errorStyle    = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 
 	// Gradient colors we'll use for the progress bar
 	ramp = makeRampStyles("#B14FFF", "#00FFA3", progressBarWidth)
@@ -68,6 +70,7 @@ type model struct {
 	TaskList    domain.TaskList  // This includes both planned and actionable tasks. You can get either through receiver methods
 	service     *service.Service // service object
 	displayMode displayMode      // Whether it's showing the list of actionable tasks
+	err         error            // An error message
 }
 
 func initializeModel(ctx context.Context, service *service.Service) model {
@@ -98,6 +101,23 @@ func (m model) fetchTaskList() tea.Msg {
 		panic(err)
 	}
 	return ListMsg{tasks: l}
+}
+
+// errCmd generates a command that sends errMsg
+func errCmd(err error) tea.Cmd {
+	return func() tea.Msg {
+		return errMsg{err: err}
+	}
+}
+
+// makeActionable generates a command that turns a task into actionable.
+//
+// If the num of tasks exceeds the limit, it sends errMsg.
+func (m model) makeActionable(task *domain.Task) tea.Cmd {
+	if !m.TaskList.CanAddAnother() {
+		return errCmd(apperrors.NewTaskExceededError(m.TaskList.MaxTskNum()))
+	}
+	return m.updateTask(task.ToActionable())
 }
 
 // updateTask updates a task and fetches the latest task list
@@ -132,6 +152,7 @@ func (m model) deleteTask(task *domain.Task) tea.Cmd {
 
 // Update implements tea.Model.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
+	m.err = nil // Refresh error message
 	switch m.displayMode {
 
 	// actionable list displayMode
@@ -145,7 +166,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 
 			// Switch actionable list mode to planned list mode
-			case "r":
+			case "s":
 				m.Choice = 0 // Reset choice index
 				m.displayMode = plannedListMode
 				return m, nil
@@ -165,6 +186,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ListMsg:
 			m.TaskList = msg.tasks
 			return m, nil
+
+		// Triggered by error message
+		case errMsg:
+			m.err = msg
 		}
 
 		// Hand off the message and model to the appropriate update function for the
@@ -185,17 +210,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, tea.Quit
 
 			// Switch planed list mode to actionable list mode
-			case "r":
+			case "s":
 				m.Choice = 0 // Reset choice index
 				m.displayMode = actionableListMode
 				return m, nil
 
-			// Make planned task into actionable one
+			// Turn selected planned task into actionable
 			case " ":
 				t := m.TaskList.PlannedTasks()[m.Choice]
-				m.Choice = 0 // Resent choice index
-				m.displayMode = actionableListMode
-				return m, m.updateTask(t.ToActionable())
+				return m, m.makeActionable(t)
 
 			// Delete a selected task
 			case "d":
@@ -207,6 +230,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 		case ListMsg:
 			m.TaskList = msg.tasks
 			return m, nil
+
+		// Triggered by error message
+		case errMsg:
+			m.err = msg
 		}
 
 		// Hand off the message and model to the appropriate update function for the
@@ -229,7 +256,11 @@ func (m model) View() string {
 	} else {
 		s = chosenView(m)
 	}
-	return mainStyle.Render("\n" + s + "\n\n")
+	var errMessage string
+	if m.err != nil {
+		errMessage = errorStyle.Render(fmt.Sprintf("\nERROR: %s\n", m.err.Error()))
+	}
+	return mainStyle.Render("\n" + s + errMessage + "\n\n")
 }
 
 // The second view, after a task has beeen chosen
@@ -291,15 +322,16 @@ func choicesView(m model) string {
 
 func helpMessage(m *model) string {
 	vertical := subtleStyle.Render("j/k, up/down: select") + dotStyle
+	switchMode := subtleStyle.Render("s: switch mode") + dotStyle
 	edit := subtleStyle.Render("e: edit") + dotStyle
 	actionable := subtleStyle.Render("space: make it actionable") + dotStyle
 	done := subtleStyle.Render("space: done") + dotStyle
 	del := subtleStyle.Render("d: delete") + dotStyle
 	quit := subtleStyle.Render("q, esc: quit")
 	if m.displayMode == actionableListMode {
-		return vertical + done + edit + quit
+		return vertical + done + edit + switchMode + quit
 	}
-	return vertical + actionable + edit + del + quit
+	return vertical + actionable + edit + del + switchMode + quit
 }
 
 func checkbox(label string, checked bool) string {
