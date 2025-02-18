@@ -15,7 +15,8 @@ Ivy Lee Method Todo App
   - [ ] full screen
   - [x] list tasks
   - [ ] add a new planned task
-  - [ ] move a task from planned to actionable
+  - [x] move a task from planned to actionable
   - [ ] update a task (title, description)
-  - [ ] delete/complete a task
+  - [x] delete/complete a task
+  - [ ] new task list component
 - [ ] move help message to service
