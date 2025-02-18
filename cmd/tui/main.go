@@ -110,6 +110,26 @@ func (m model) updateTask(task *domain.Task) tea.Cmd {
 	}
 }
 
+// completeTask updates a task and fetches the latest task list
+func (m model) completeTask(task *domain.Task) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.service.DeleteTask(m.ctx, task.Id()); err != nil {
+			return errMsg{err: err}
+		}
+		return m.fetchTaskList()
+	}
+}
+
+// deleteTask deletes a task and fetches the latest task list
+func (m model) deleteTask(task *domain.Task) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.service.DeleteTask(m.ctx, task.Id()); err != nil {
+			return errMsg{err: err}
+		}
+		return m.fetchTaskList()
+	}
+}
+
 // Update implements tea.Model.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch m.displayMode {
@@ -130,10 +150,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.displayMode = plannedListMode
 				return m, nil
 
+			// turn the selected task into planned one
 			case "m":
 				m.Choice = 0 // Reset choice index
 				t := m.TaskList.ActionableTasks()[m.Choice]
 				return m, m.updateTask(t.ToPlanned())
+			// complete the selected task
+			case " ":
+				t := m.TaskList.ActionableTasks()[m.Choice]
+				return m, m.completeTask(t)
 			}
 
 		// Triggered by a new task list
@@ -148,7 +173,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			return updateChoices(msg, m)
 		}
 
-		// planned list displayMode
+	// planned list displayMode
 	case plannedListMode:
 		switch msg := msg.(type) {
 
@@ -171,6 +196,11 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.Choice = 0 // Resent choice index
 				m.displayMode = actionableListMode
 				return m, m.updateTask(t.ToActionable())
+
+			// Delete a selected task
+			case "d":
+				t := m.TaskList.PlannedTasks()[m.Choice]
+				return m, m.deleteTask(t)
 			}
 
 		// Triggered by a new task list
@@ -262,12 +292,12 @@ func choicesView(m model) string {
 func helpMessage(m *model) string {
 	vertical := subtleStyle.Render("j/k, up/down: select") + dotStyle
 	edit := subtleStyle.Render("e: edit") + dotStyle
-	actionable := subtleStyle.Render("m: make it actionable") + dotStyle
-	done := subtleStyle.Render("d: done") + dotStyle
+	actionable := subtleStyle.Render("space: make it actionable") + dotStyle
+	done := subtleStyle.Render("space: done") + dotStyle
 	del := subtleStyle.Render("d: delete") + dotStyle
 	quit := subtleStyle.Render("q, esc: quit")
 	if m.displayMode == actionableListMode {
-		return vertical + edit + done + quit
+		return vertical + done + edit + quit
 	}
 	return vertical + actionable + edit + del + quit
 }
