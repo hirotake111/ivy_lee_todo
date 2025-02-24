@@ -3,7 +3,6 @@ package main
 import (
 	"context"
 	"fmt"
-	"math"
 	"strconv"
 	"strings"
 	"time"
@@ -12,7 +11,6 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/fogleman/ease"
 	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
 	"github.com/hirotake111/ivy_lee_todo/pkg/db"
 	"github.com/hirotake111/ivy_lee_todo/pkg/domain"
@@ -74,7 +72,6 @@ func main() {
 type model struct {
 	ctx             context.Context
 	Choice          int               // Index of the item cursor is currently pointing to
-	Chosen          bool              // Whether the item is chosen or not
 	Ticks           int               // Tick!
 	Frames          int               // Frames?
 	Progress        float64           // not neccessary
@@ -113,7 +110,6 @@ func initializeModel(ctx context.Context, service *service.Service) model {
 
 	return model{
 		Choice:          0,
-		Chosen:          false,
 		Ticks:           10,
 		Frames:          0,
 		Progress:        0,
@@ -278,9 +274,10 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Handle character input and blinking
 		return m.updateInput(msg)
-	}
 
-	return updateChosen(msg, m)
+	default:
+		panic(fmt.Sprintf("unknown display mode: %d", m.displayMode))
+	}
 }
 
 func (m *model) updateInput(msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -302,10 +299,8 @@ func (m model) View() string {
 
 	if m.displayMode == newTaskMode {
 		s = newTaskFormView(m)
-	} else if !m.Chosen {
-		s = choicesView(m)
 	} else {
-		s = chosenView(m)
+		s = choicesView(m)
 	}
 	var errMessage string
 	if m.err != nil {
@@ -333,38 +328,6 @@ func newTaskFormView(m model) string {
 	b.WriteString(cursorModeHelpStyle.Render(m.cursorMode.String()))
 	b.WriteString(helpStyle.Render(" (ctrl+r to change style)"))
 	return b.String()
-}
-
-// The second view, after a task has beeen chosen
-func chosenView(m model) string {
-	var msg string
-	switch m.Choice {
-	case 0:
-		msg = fmt.Sprintf("Carrot planting?\n\nCool, we'll need %s and %s...", keywordStyle.Render("libgarden"), keywordStyle.Render("vegeutils"))
-	case 1:
-		msg = fmt.Sprintf("A trip to the market?\n\nOkay, then we should install %s and %s...", keywordStyle.Render("marketkit"), keywordStyle.Render("libshopping"))
-	case 2:
-		msg = fmt.Sprintf("Reading time?\n\nOkay, cool, then we’ll need a library. Yes, an %s.", keywordStyle.Render("actual library"))
-	default:
-		msg = fmt.Sprintf("It’s always good to see friends.\n\nFetching %s and %s...", keywordStyle.Render("social-skills"), keywordStyle.Render("conversationutils"))
-	}
-	label := "Downloading..."
-	if m.Loaded {
-		label = fmt.Sprintf("Downloaded. Exisitng in %s seconds.,..", ticksStyle.Render(strconv.Itoa(m.Ticks)))
-	}
-	return msg + "\n\n" + label + "\n" + progressbar(m.Progress) + "%"
-}
-
-func progressbar(percent float64) string {
-	w := float64(progressBarWidth)
-	fullSize := int(math.Round(w * percent))
-	var fullCells string
-	for i := 0; i < fullSize; i++ {
-		fullCells += ramp[i].Render(progressFullChar)
-	}
-	emptySize := int(w) - fullSize
-	emptyCells := strings.Repeat(progressEmpty, emptySize)
-	return fmt.Sprintf("%s%s %3.0f", fullCells, emptyCells, math.Round(percent*100))
 }
 
 // The first view, where you're choosing a task
@@ -471,34 +434,6 @@ func colorFloatToHex(f float64) (s string) {
 	return
 }
 
-// Update loop for the second view after a choice has beeen made
-func updateChosen(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
-	switch msg.(type) {
-	case frameMsg:
-		if !m.Loaded {
-			m.Frames++
-			m.Progress = ease.OutBounce(float64(m.Frames) / float64(100))
-			if m.Progress >= 1 {
-				m.Progress = 1
-				m.Loaded = true
-				m.Ticks = 3
-				return m, tick()
-			}
-			return m, frame()
-		}
-	case tickMsg:
-		if m.Loaded {
-			if m.Ticks == 0 {
-				m.Quitting = true
-				return m, tea.Quit
-			}
-			m.Ticks--
-			return m, tick()
-		}
-	}
-	return m, nil
-}
-
 // Update loop for the first view where you're choosing a task
 func updateChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 	l := len(m.TaskList.ActionableTasks())
@@ -512,17 +447,7 @@ func updateChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
 			m.Choice = min(m.Choice+1, l-1)
 		case "k", "up":
 			m.Choice = max(m.Choice-1, 0)
-		case "enter":
-			m.Chosen = true
-			return m, frame()
 		}
-	case tickMsg:
-		if m.Ticks == 0 {
-			m.Quitting = true
-			return m, tea.Quit
-		}
-		m.Ticks--
-		return m, tick()
 	}
 	return m, nil
 }
@@ -571,7 +496,7 @@ func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 			return m, updateTaskCmd(&m, t.ToPlanned())
 
 		// Complete selected task
-		case "e":
+		case " ":
 			t := m.TaskList.ActionableTasks()[m.Choice]
 			return m, completeTaskCmd(&m, t)
 
@@ -594,10 +519,7 @@ func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Hand off the message and model to the appropriate update function for the
 	// appropriate view based on the current state.
-	if !m.Chosen {
-		return updateChoices(msg, m)
-	}
-	return updateChosen(msg, m)
+	return updateChoices(msg, m)
 }
 
 func updateWithPlannedlistMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
@@ -645,8 +567,5 @@ func updateWithPlannedlistMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Hand off the message and model to the appropriate update function for the
 	// appropriate view based on the current state.
-	if !m.Chosen {
-		return updateChoices(msg, m)
-	}
-	return updateChosen(msg, m)
+	return updateChoices(msg, m)
 }
