@@ -8,10 +8,10 @@ import (
 	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
+	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
-	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
 	"github.com/hirotake111/ivy_lee_todo/pkg/db"
 	"github.com/hirotake111/ivy_lee_todo/pkg/domain"
 	"github.com/hirotake111/ivy_lee_todo/pkg/repository"
@@ -50,6 +50,8 @@ var (
 	cursorStyle         = focusedStyle
 	noStyle             = lipgloss.NewStyle()
 
+	docStyle = lipgloss.NewStyle().Margin(1, 2)
+
 	// Gradient colors we'll use for the progress bar
 	ramp = makeRampStyles("#B14FFF", "#00FFA3", progressBarWidth)
 	// Submit Button
@@ -71,7 +73,6 @@ func main() {
 
 type model struct {
 	ctx             context.Context
-	Choice          int               // Index of the item cursor is currently pointing to
 	Ticks           int               // Tick!
 	Frames          int               // Frames?
 	Progress        float64           // not neccessary
@@ -85,6 +86,8 @@ type model struct {
 	cursorMode      cursor.Mode       // Behavior of the cursor (not neccessary?)
 	inputIndex      int               // Index of the text input fields
 	inputs          []textinput.Model // text input fields
+	list            list.Model        // A list of tasks currently been displayed
+	showActionable  bool              // True when showing a list of available tasks
 }
 
 func initializeModel(ctx context.Context, service *service.Service) model {
@@ -108,8 +111,10 @@ func initializeModel(ctx context.Context, service *service.Service) model {
 	form.TextStyle = noStyle
 	forms = append(forms, form)
 
+	list := list.New(make([]list.Item, 0), list.NewDefaultDelegate(), 0, 0)
+	list.Title = "FOO"
+	list.SetShowTitle(true)
 	return model{
-		Choice:          0,
 		Ticks:           10,
 		Frames:          0,
 		Progress:        0,
@@ -120,13 +125,15 @@ func initializeModel(ctx context.Context, service *service.Service) model {
 		displayMode:     actionableListMode,
 		prevDisplayMode: actionableListMode,
 		inputs:          forms,
+		list:            list,
+		showActionable:  true,
 	}
 
 }
 
 // Init implements tea.Model.
 func (m model) Init() tea.Cmd {
-	return fetchTaskListCmd(&m)
+	return fetchTaskListCmd(m)
 }
 
 // updateInputStyle recalculates each input style based on focused index
@@ -160,12 +167,12 @@ func (m *model) ClearInputs() {
 	m.updateInputStyle()
 }
 
-// fetchTaskListCmd retrieves a list of tasks and returns ListMsg
-func fetchTaskListCmd(m *model) tea.Cmd {
+// fetchTaskListCmd generates a command that sends ListMsg
+func fetchTaskListCmd(m model) tea.Cmd {
 	return func() tea.Msg {
 		l, err := m.service.List(m.ctx)
 		if err != nil {
-			panic(err)
+			return errMsg{err: err}
 		}
 		return ListMsg{tasks: l}
 	}
@@ -179,7 +186,7 @@ func errCmd(err error) tea.Cmd {
 }
 
 // newTaskCmd generates a command that creates a new planned task
-func newTaskCmd(m *model, task *domain.NewTaskRequest) tea.Cmd {
+func newTaskCmd(m model, task *domain.NewTaskRequest) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.service.AddTask(m.ctx, task.Title, task.Description); err != nil {
 			return errCmd(err)
@@ -188,17 +195,8 @@ func newTaskCmd(m *model, task *domain.NewTaskRequest) tea.Cmd {
 	}
 }
 
-// availableTaskCmd generates a command that turns a task into actionable.
-// If the num of tasks exceeds the limit, it sends errMsg.
-func availableTaskCmd(m *model, task *domain.Task) tea.Cmd {
-	if !m.TaskList.CanAddAnother() {
-		return errCmd(apperrors.NewTaskExceededError(m.TaskList.MaxTskNum()))
-	}
-	return updateTaskCmd(m, task.ToActionable())
-}
-
 // updateTaskCmd updates a task and fetches the latest task list
-func updateTaskCmd(m *model, task *domain.Task) tea.Cmd {
+func updateTaskCmd(m model, task *domain.Task) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.service.Update(m.ctx, task); err != nil {
 			return errMsg{err: err}
@@ -208,7 +206,7 @@ func updateTaskCmd(m *model, task *domain.Task) tea.Cmd {
 }
 
 // completeTaskCmd updates a task and fetches the latest task list
-func completeTaskCmd(m *model, task *domain.Task) tea.Cmd {
+func completeTaskCmd(m model, task *domain.Task) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.service.DeleteTask(m.ctx, task.Id()); err != nil {
 			return errMsg{err: err}
@@ -218,7 +216,7 @@ func completeTaskCmd(m *model, task *domain.Task) tea.Cmd {
 }
 
 // deleteTaskCmd deletes a task and fetches the latest task list
-func deleteTaskCmd(m *model, task *domain.Task) tea.Cmd {
+func deleteTaskCmd(m model, task *domain.Task) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.service.DeleteTask(m.ctx, task.Id()); err != nil {
 			return errMsg{err: err}
@@ -262,7 +260,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Description: m.inputs[1].Value(),
 					}
 					m.ClearInputs()
-					return m, newTaskCmd(&m, req)
+					return m, newTaskCmd(m, req)
 				}
 				var cmd tea.Cmd
 				m.inputIndex = (m.inputIndex + 1) % (len(m.inputs) + 1)
@@ -300,7 +298,7 @@ func (m model) View() string {
 	if m.displayMode == newTaskMode {
 		s = newTaskFormView(m)
 	} else {
-		s = choicesView(m)
+		s = docStyle.Render(m.list.View())
 	}
 	var errMessage string
 	if m.err != nil {
@@ -332,27 +330,29 @@ func newTaskFormView(m model) string {
 
 // The first view, where you're choosing a task
 func choicesView(m model) string {
-	c := m.Choice
-	var tasks []*domain.Task
-	if m.displayMode == actionableListMode {
-		tasks = m.TaskList.ActionableTasks()
-	} else if m.displayMode == plannedListMode {
-		tasks = m.TaskList.PlannedTasks()
-	}
-	var tpl string
-	if m.displayMode == actionableListMode {
-		tpl = fmt.Sprintf("TODOs (%d/%d)\n\n", len(tasks), m.TaskList.MaxTskNum())
-	} else if m.displayMode == plannedListMode {
-		tpl = fmt.Sprintf("Planned Tasks (%d)\n\n", len(tasks))
-	}
-	tpl += "%s\n\n"
-	tpl += helpMessage(&m)
-	var choices strings.Builder
-	for i, t := range tasks {
-		cb := checkbox(t.Title(), c == i)
-		choices.WriteString(fmt.Sprintf("%s\n", cb))
-	}
-	return fmt.Sprintf(tpl, choices.String())
+	return docStyle.Render(m.list.View())
+	// c := m.Choice
+	// var tasks []*domain.Task
+	// if m.displayMode == actionableListMode {
+	// 	tasks = m.TaskList.ActionableTasks()
+	// } else if m.displayMode == plannedListMode {
+	// 	tasks = m.TaskList.PlannedTasks()
+	// }
+	// var tpl string
+	// if m.displayMode == actionableListMode {
+	// 	tpl = fmt.Sprintf("TODOs (%d/%d)\n\n", len(tasks), m.TaskList.MaxTskNum())
+	// } else if m.displayMode == plannedListMode {
+	// 	tpl = fmt.Sprintf("Planned Tasks (%d)\n\n", len(tasks))
+	// }
+	// tpl += "%s\n\n"
+	// tpl += "\ndebug: %s\n"
+	// tpl += helpMessage(&m)
+	// var choices strings.Builder
+	// for i, t := range tasks {
+	// 	cb := checkbox(t.Title(), c == i)
+	// 	choices.WriteString(fmt.Sprintf("%s\n", cb))
+	// }
+	// return fmt.Sprintf(tpl, choices.String(), docStyle.Render(m.list.View()))
 }
 
 func helpMessage(m *model) string {
@@ -367,13 +367,6 @@ func helpMessage(m *model) string {
 		return vertical + done + edit + switchMode + quit
 	}
 	return vertical + actionable + edit + del + switchMode + quit
-}
-
-func checkbox(label string, checked bool) string {
-	if checked {
-		return checkboxStyle.Render("[x] -" + label)
-	}
-	return fmt.Sprintf("[ ] -%s", label)
 }
 
 type (
@@ -392,6 +385,11 @@ type errMsg struct {
 
 func (e errMsg) Error() string {
 	return e.err.Error()
+}
+
+// newDisplayItemsMsg contains a new list of items currently been displayed
+type newDisplayItemsMsg struct {
+	tasks []*domain.Task
 }
 
 func tick() tea.Cmd {
@@ -434,96 +432,119 @@ func colorFloatToHex(f float64) (s string) {
 	return
 }
 
-// Update loop for the first view where you're choosing a task
-func updateChoices(msg tea.Msg, m model) (tea.Model, tea.Cmd) {
-	l := len(m.TaskList.ActionableTasks())
-	if m.displayMode == plannedListMode {
-		l = len(m.TaskList.PlannedTasks())
-	}
-	switch msg := msg.(type) {
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "j", "down":
-			m.Choice = min(m.Choice+1, l-1)
-		case "k", "up":
-			m.Choice = max(m.Choice-1, 0)
-		}
-	}
-	return m, nil
+type displayItem struct {
+	title, desc string
 }
 
-func min(a, b int) int {
-	if a < b {
-		return a
+func NewItems(tasks []*domain.Task) (is []list.Item) {
+	for _, t := range tasks {
+		is = append(is, displayItem{title: t.Title(), desc: t.Description()})
 	}
-	return b
+	return
 }
-
-func max(a, b int) int {
-	if a > b {
-		return a
-	}
-	return b
-}
-
-type item struct {
-	title       string
-	description string
-}
-
-func (i item) Title() string       { return i.title }
-func (i item) Description() string { return i.description }
+func (i displayItem) Title() string       { return i.title }
+func (i displayItem) Description() string { return i.desc }
+func (i displayItem) FilterValue() string { return i.title }
 
 func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		h, v := docStyle.GetFrameSize()
+		m.list.SetSize(msg.Width-h, msg.Height-v)
+		return m, nil
+
 	// Triggered by a key stroke
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q", "esc":
+		case "ctrl+c", "q":
 			m.Quitting = true
 			return m, tea.Quit
 
 		// Toggle actionable list mode to planned list mode
 		case "t":
-			m.Choice = 0 // Reset choice index
 			m.displayMode = plannedListMode
-			return m, nil
+			m.showActionable = !m.showActionable
+			return m, refleshDisplayItemCmd(m)
 
 		// Move selected task into planned one
 		case "m":
-			m.Choice = 0 // Reset choice index
-			t := m.TaskList.ActionableTasks()[m.Choice]
-			return m, updateTaskCmd(&m, t.ToPlanned())
+			if len(m.TaskList.ActionableTasks()) == 0 || len(m.TaskList.PlannedTasks()) == 0 {
+			}
+			var t *domain.Task
+			if m.showActionable {
+				t = m.TaskList.ActionableTasks()[m.list.Index()].ToPlanned()
+			} else {
+				t = m.TaskList.PlannedTasks()[m.list.Index()].ToActionable()
+			}
+			return m, updateTaskCmd(m, t)
 
 		// Complete selected task
 		case " ":
-			t := m.TaskList.ActionableTasks()[m.Choice]
-			return m, completeTaskCmd(&m, t)
+			// Only performs completion when it's displaying actionable tasks
+			if m.showActionable {
+				t := m.TaskList.ActionableTasks()[m.list.Index()]
+				return m, completeTaskCmd(m, t)
+			}
+
+		// Delete a selected task
+		case "d":
+			var t *domain.Task
+			if m.showActionable {
+				t = m.TaskList.ActionableTasks()[m.list.Index()]
+			}
+			t = m.TaskList.PlannedTasks()[m.list.Index()]
+			return m, deleteTaskCmd(m, t)
 
 		// New task mode
 		case "a":
-			m.prevDisplayMode = m.displayMode
-			m.displayMode = newTaskMode
-			return m, nil
+			if !(m.list.FilterState() != list.Unfiltered) {
+				m.prevDisplayMode = m.displayMode
+				m.displayMode = newTaskMode
+			}
 		}
 
 	// Triggered by a new task list
 	case ListMsg:
+		// Update task list
 		m.TaskList = msg.tasks
-		return m, nil
+		//Reflesh items currently been displayed
+		return m, refleshDisplayItemCmd(m)
+
+	// Reflesh display items
+	case newDisplayItemsMsg:
+		return m, m.list.SetItems(NewItems(msg.tasks))
 
 	// Triggered by error message
 	case errMsg:
 		m.err = msg
+
 	}
 
 	// Hand off the message and model to the appropriate update function for the
 	// appropriate view based on the current state.
-	return updateChoices(msg, m)
+	// return updateChoices(msg, m)
+	// return m, nil
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
+}
+
+// refleshDisplayItemCmd generates a command that sends a message with new display items
+func refleshDisplayItemCmd(m model) tea.Cmd {
+	return func() tea.Msg {
+		if m.showActionable {
+			return newDisplayItemsMsg{tasks: m.TaskList.ActionableTasks()}
+		}
+		return newDisplayItemsMsg{tasks: m.TaskList.PlannedTasks()}
+	}
 }
 
 func updateWithPlannedlistMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
+	case tea.WindowSizeMsg:
+		h, v := docStyle.GetFrameSize()
+		m.list.SetSize(msg.Width-h, msg.Height-v)
+		return m, nil
 
 	// Triggered by a key stroke
 	case tea.KeyMsg:
@@ -534,31 +555,39 @@ func updateWithPlannedlistMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Toggle planed list mode to actionable list mode
 		case "t":
-			m.Choice = 0 // Reset choice index
 			m.displayMode = actionableListMode
-			return m, nil
+			m.showActionable = !m.showActionable
+			return m, refleshDisplayItemCmd(m)
 
 		// Move selected planned task into actionable
 		case "m":
-			t := m.TaskList.PlannedTasks()[m.Choice]
-			return m, availableTaskCmd(&m, t)
+			t := m.TaskList.PlannedTasks()[m.list.Index()]
+			return m, updateTaskCmd(m, t.ToActionable())
 
 		// New task mode
 		case "a":
-			m.prevDisplayMode = m.displayMode
-			m.displayMode = newTaskMode
-			return m, nil
+			if !(m.list.FilterState() != list.Unfiltered) {
+				m.prevDisplayMode = m.displayMode
+				m.displayMode = newTaskMode
+				return m, nil
+			}
 
 		// Delete a selected task
 		case "d":
-			t := m.TaskList.PlannedTasks()[m.Choice]
-			return m, deleteTaskCmd(&m, t)
+			t := m.TaskList.PlannedTasks()[m.list.Index()]
+			return m, deleteTaskCmd(m, t)
 		}
 
 	// Triggered by a new task list
 	case ListMsg:
+		// Update task list
 		m.TaskList = msg.tasks
-		return m, nil
+		//Reflesh items currently been displayed
+		return m, refleshDisplayItemCmd(m)
+
+	// Reflesh display items
+	case newDisplayItemsMsg:
+		return m, m.list.SetItems(NewItems(msg.tasks))
 
 	// Triggered by error message
 	case errMsg:
@@ -567,5 +596,8 @@ func updateWithPlannedlistMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Hand off the message and model to the appropriate update function for the
 	// appropriate view based on the current state.
-	return updateChoices(msg, m)
+	// return updateChoices(msg, m)
+	var cmd tea.Cmd
+	m.list, cmd = m.list.Update(msg)
+	return m, cmd
 }
