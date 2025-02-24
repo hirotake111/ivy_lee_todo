@@ -19,4 +19,5 @@ Ivy Lee Method Todo App
   - [ ] update a task (title, description)
   - [x] delete/complete a task
   - [ ] new task list component
+  - [ ] refactor UI implementation
 - [ ] move help message to service
