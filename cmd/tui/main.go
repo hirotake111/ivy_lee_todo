@@ -12,6 +12,7 @@ import (
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/charmbracelet/lipgloss"
+	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
 	"github.com/hirotake111/ivy_lee_todo/pkg/db"
 	"github.com/hirotake111/ivy_lee_todo/pkg/domain"
 	"github.com/hirotake111/ivy_lee_todo/pkg/repository"
@@ -88,6 +89,7 @@ type model struct {
 	inputs          []textinput.Model // text input fields
 	list            list.Model        // A list of tasks currently been displayed
 	showActionable  bool              // True when showing a list of available tasks
+	mode            appMode           // app mode
 }
 
 func initializeModel(ctx context.Context, service *service.Service) model {
@@ -127,6 +129,7 @@ func initializeModel(ctx context.Context, service *service.Service) model {
 		inputs:          forms,
 		list:            list,
 		showActionable:  true,
+		mode:            newAppMode(),
 	}
 
 }
@@ -165,6 +168,18 @@ func (m *model) ClearInputs() {
 	// Update input style based on focused index
 	m.inputIndex = 0
 	m.updateInputStyle()
+}
+
+// selectedTask returns a list of tasks currently been displayed
+func (m model) selectedTask() (*domain.Task, error) {
+	tasks := m.TaskList.ActionableTasks()
+	if !m.mode.showingActionable() {
+		tasks = m.TaskList.PlannedTasks()
+	}
+	if len(tasks) <= m.list.Index() {
+		return nil, apperrors.OutOfIndex{}
+	}
+	return tasks[m.list.Index()], nil
 }
 
 // fetchTaskListCmd generates a command that sends ListMsg
@@ -228,64 +243,56 @@ func deleteTaskCmd(m model, task *domain.Task) tea.Cmd {
 // Update implements tea.Model.
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.err = nil // Refresh error message
-	switch m.displayMode {
-
-	// actionable list displayMode
-	case actionableListMode:
+	if m.mode.isListMode() {
 		return updateWithActionableListMode(m, msg)
-
-	// planned list displayMode
-	case plannedListMode:
-		return updateWithPlannedlistMode(m, msg)
-
-	// edit task mode
-	case newTaskMode, editTaskMode:
-		switch msg := msg.(type) {
-		// Triggered by a key stroke
-		case tea.KeyMsg:
-			switch msg.Type {
-			// Back to the previous mode
-			case tea.KeyCtrlC, tea.KeyEscape:
-				m.displayMode = m.prevDisplayMode
-				m.ClearInputs()
-				return m, nil
-
-			// Go to the next input
-			case tea.KeyTab, tea.KeyEnter:
-				// If submit button is focused end user hit enter, then submit the new item
-				if msg.Type == tea.KeyEnter && m.canSubmit() {
-					m.displayMode = m.prevDisplayMode
-					req := &domain.NewTaskRequest{
-						Title:       m.inputs[0].Value(),
-						Description: m.inputs[1].Value(),
-					}
-					m.ClearInputs()
-					return m, newTaskCmd(m, req)
-				}
-				var cmd tea.Cmd
-				m.inputIndex = (m.inputIndex + 1) % (len(m.inputs) + 1)
-				// Update input style based on focused index
-				m.updateInputStyle()
-				return m, cmd
-			}
-		}
-
-		// Handle character input and blinking
-		return m.updateInput(msg)
-
-	default:
-		panic(fmt.Sprintf("unknown display mode: %d", m.displayMode))
+	} else {
+		return updateWithTaskEditMode(m, msg)
 	}
 }
 
-func (m *model) updateInput(msg tea.Msg) (tea.Model, tea.Cmd) {
+func updateWithTaskEditMode(m model, msg tea.Msg) (model, tea.Cmd) {
+	switch msg := msg.(type) {
+	// Triggered by a key stroke
+	case tea.KeyMsg:
+		switch msg.Type {
+		// Back to the previous mode
+		case tea.KeyCtrlC, tea.KeyEscape:
+			// m.displayMode = m.prevDisplayMode
+			m.mode.toPrevMode()
+			m.ClearInputs()
+			return m, nil
+
+		// Go to the next input
+		case tea.KeyTab, tea.KeyEnter:
+			// Perform submission only when the button is focused & end user hits the enter key.
+			if msg.Type == tea.KeyEnter && m.canSubmit() {
+				m.mode.toPrevMode()
+				req := &domain.NewTaskRequest{
+					Title:       m.inputs[0].Value(),
+					Description: m.inputs[1].Value(),
+				}
+				m.ClearInputs()
+				return m, newTaskCmd(m, req)
+			}
+			var cmd tea.Cmd
+			m.inputIndex = (m.inputIndex + 1) % (len(m.inputs) + 1)
+			m.updateInputStyle()
+			return m, cmd
+		}
+	}
+
+	// Handle character input and blinking
+	return m, m.updateInput(msg)
+}
+
+func (m *model) updateInput(msg tea.Msg) tea.Cmd {
 	cmds := make([]tea.Cmd, len(m.inputs))
 	// Only text inputs with Focus() set will respond, so it's safe to simply
 	// update all of them here without any further logic
 	for i := range m.inputs {
 		m.inputs[i], cmds[i] = m.inputs[i].Update(msg)
 	}
-	return m, tea.Batch(cmds...)
+	return tea.Batch(cmds...)
 }
 
 // View implements tea.Model.
@@ -295,15 +302,17 @@ func (m model) View() string {
 		return "\n  See you later!\n\n"
 	}
 
-	if m.displayMode == newTaskMode {
-		s = newTaskFormView(m)
+	if m.mode.isListMode() {
+		s = docStyle.Render(m.list.View()) + fmt.Sprintf("mode: %+v. showingActionable: %t", m.mode, m.mode.showingActionable())
 	} else {
-		s = docStyle.Render(m.list.View())
+		s = newTaskFormView(m)
 	}
+
 	var errMessage string
 	if m.err != nil {
 		errMessage = errorStyle.Render(fmt.Sprintf("\nERROR: %s\n", m.err.Error()))
 	}
+
 	return mainStyle.Render("\n" + s + errMessage + "\n\n")
 }
 
@@ -462,44 +471,44 @@ func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// Toggle actionable list mode to planned list mode
 		case "t":
-			m.displayMode = plannedListMode
-			m.showActionable = !m.showActionable
+			m.mode.toggleListMode()
 			return m, refleshDisplayItemCmd(m)
 
 		// Move selected task into planned one
 		case "m":
-			if len(m.TaskList.ActionableTasks()) == 0 || len(m.TaskList.PlannedTasks()) == 0 {
+			task, err := m.selectedTask()
+			if err != nil {
+				break
 			}
-			var t *domain.Task
-			if m.showActionable {
-				t = m.TaskList.ActionableTasks()[m.list.Index()].ToPlanned()
-			} else {
-				t = m.TaskList.PlannedTasks()[m.list.Index()].ToActionable()
+			if m.mode.showingActionable() {
+				return m, updateTaskCmd(m, task.ToPlanned())
 			}
-			return m, updateTaskCmd(m, t)
+			return m, updateTaskCmd(m, task.ToActionable())
 
 		// Complete selected task
 		case " ":
+			selected, err := m.selectedTask()
+			if err != nil {
+				break
+			}
 			// Only performs completion when it's displaying actionable tasks
-			if m.showActionable {
-				t := m.TaskList.ActionableTasks()[m.list.Index()]
-				return m, completeTaskCmd(m, t)
+			if m.mode.showingActionable() {
+				return m, completeTaskCmd(m, selected)
 			}
 
 		// Delete a selected task
 		case "d":
-			var t *domain.Task
-			if m.showActionable {
-				t = m.TaskList.ActionableTasks()[m.list.Index()]
+			selected, err := m.selectedTask()
+			if err != nil {
+				break
 			}
-			t = m.TaskList.PlannedTasks()[m.list.Index()]
-			return m, deleteTaskCmd(m, t)
+			return m, deleteTaskCmd(m, selected)
 
 		// New task mode
 		case "a":
+			// Update the view only when user is not filtering
 			if !(m.list.FilterState() != list.Unfiltered) {
-				m.prevDisplayMode = m.displayMode
-				m.displayMode = newTaskMode
+				m.mode.toNewTaskMode()
 			}
 		}
 
@@ -512,18 +521,14 @@ func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 
 	// Reflesh display items
 	case newDisplayItemsMsg:
+		m.list.ResetSelected()
 		return m, m.list.SetItems(NewItems(msg.tasks))
 
 	// Triggered by error message
 	case errMsg:
 		m.err = msg
-
 	}
 
-	// Hand off the message and model to the appropriate update function for the
-	// appropriate view based on the current state.
-	// return updateChoices(msg, m)
-	// return m, nil
 	var cmd tea.Cmd
 	m.list, cmd = m.list.Update(msg)
 	return m, cmd
@@ -532,72 +537,49 @@ func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 // refleshDisplayItemCmd generates a command that sends a message with new display items
 func refleshDisplayItemCmd(m model) tea.Cmd {
 	return func() tea.Msg {
-		if m.showActionable {
+		if m.mode.showingActionable() {
 			return newDisplayItemsMsg{tasks: m.TaskList.ActionableTasks()}
 		}
 		return newDisplayItemsMsg{tasks: m.TaskList.PlannedTasks()}
 	}
 }
 
-func updateWithPlannedlistMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
-	switch msg := msg.(type) {
-	case tea.WindowSizeMsg:
-		h, v := docStyle.GetFrameSize()
-		m.list.SetSize(msg.Width-h, msg.Height-v)
-		return m, nil
+type appMode struct {
+	mode displayMode
+	prev displayMode
+}
 
-	// Triggered by a key stroke
-	case tea.KeyMsg:
-		switch msg.String() {
-		case "ctrl+c", "q", "esc":
-			m.Quitting = true
-			return m, tea.Quit
-
-		// Toggle planed list mode to actionable list mode
-		case "t":
-			m.displayMode = actionableListMode
-			m.showActionable = !m.showActionable
-			return m, refleshDisplayItemCmd(m)
-
-		// Move selected planned task into actionable
-		case "m":
-			t := m.TaskList.PlannedTasks()[m.list.Index()]
-			return m, updateTaskCmd(m, t.ToActionable())
-
-		// New task mode
-		case "a":
-			if !(m.list.FilterState() != list.Unfiltered) {
-				m.prevDisplayMode = m.displayMode
-				m.displayMode = newTaskMode
-				return m, nil
-			}
-
-		// Delete a selected task
-		case "d":
-			t := m.TaskList.PlannedTasks()[m.list.Index()]
-			return m, deleteTaskCmd(m, t)
-		}
-
-	// Triggered by a new task list
-	case ListMsg:
-		// Update task list
-		m.TaskList = msg.tasks
-		//Reflesh items currently been displayed
-		return m, refleshDisplayItemCmd(m)
-
-	// Reflesh display items
-	case newDisplayItemsMsg:
-		return m, m.list.SetItems(NewItems(msg.tasks))
-
-	// Triggered by error message
-	case errMsg:
-		m.err = msg
+func newAppMode() appMode {
+	return appMode{
+		mode: actionableListMode,
+		prev: actionableListMode,
 	}
+}
 
-	// Hand off the message and model to the appropriate update function for the
-	// appropriate view based on the current state.
-	// return updateChoices(msg, m)
-	var cmd tea.Cmd
-	m.list, cmd = m.list.Update(msg)
-	return m, cmd
+func (a appMode) isListMode() bool {
+	return a.mode == actionableListMode || a.mode == plannedListMode
+}
+
+func (a appMode) showingActionable() bool {
+	return a.mode == actionableListMode
+}
+
+func (a *appMode) toggleListMode() *appMode {
+	if a.mode == actionableListMode {
+		a.mode = plannedListMode
+	} else if a.mode == plannedListMode {
+		a.mode = actionableListMode
+	}
+	return a
+}
+
+func (a *appMode) toNewTaskMode() *appMode {
+	a.prev = a.mode
+	a.mode = newTaskMode
+	return a
+}
+
+func (a *appMode) toPrevMode() *appMode {
+	a.mode, a.prev = a.prev, a.mode
+	return a
 }

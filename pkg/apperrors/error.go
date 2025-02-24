@@ -7,6 +7,12 @@ type TaskNumbersExceededError struct {
 	maxTaskNum int
 }
 
+type OutOfIndex struct{}
+
+func (e OutOfIndex) Error() string {
+	return "out of boundary"
+}
+
 var (
 	NotFound error = errors.New("not found")
 	Quit     error = errors.New("quit")
