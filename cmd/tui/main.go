@@ -72,21 +72,22 @@ func main() {
 }
 
 type model struct {
-	ctx         context.Context
-	Choice      int               // Index of the item cursor is currently pointing to
-	Chosen      bool              // Whether the item is chosen or not
-	Ticks       int               // Tick!
-	Frames      int               // Frames?
-	Progress    float64           // not neccessary
-	Loaded      bool              // Whether it's loaded
-	Quitting    bool              // Is the program quitting now?
-	TaskList    domain.TaskList   // This includes both planned and actionable tasks. You can get either through receiver methods
-	service     *service.Service  // service object
-	displayMode displayMode       // Whether it's showing the list of actionable tasks
-	err         error             // An error message
-	cursorMode  cursor.Mode       // Behavior of the cursor (not neccessary?)
-	inputIndex  int               // Index of the text input fields
-	inputs      []textinput.Model // text input fields
+	ctx             context.Context
+	Choice          int               // Index of the item cursor is currently pointing to
+	Chosen          bool              // Whether the item is chosen or not
+	Ticks           int               // Tick!
+	Frames          int               // Frames?
+	Progress        float64           // not neccessary
+	Loaded          bool              // Whether it's loaded
+	Quitting        bool              // Is the program quitting now?
+	TaskList        domain.TaskList   // This includes both planned and actionable tasks. You can get either through receiver methods
+	service         *service.Service  // service object
+	displayMode     displayMode       // Whether it's showing the list of actionable tasks
+	prevDisplayMode displayMode       // Previous display mode
+	err             error             // An error message
+	cursorMode      cursor.Mode       // Behavior of the cursor (not neccessary?)
+	inputIndex      int               // Index of the text input fields
+	inputs          []textinput.Model // text input fields
 }
 
 func initializeModel(ctx context.Context, service *service.Service) model {
@@ -111,17 +112,18 @@ func initializeModel(ctx context.Context, service *service.Service) model {
 	forms = append(forms, form)
 
 	return model{
-		Choice:      0,
-		Chosen:      false,
-		Ticks:       10,
-		Frames:      0,
-		Progress:    0,
-		Loaded:      false,
-		Quitting:    false,
-		ctx:         ctx,
-		service:     service,
-		displayMode: actionableListMode,
-		inputs:      forms,
+		Choice:          0,
+		Chosen:          false,
+		Ticks:           10,
+		Frames:          0,
+		Progress:        0,
+		Loaded:          false,
+		Quitting:        false,
+		ctx:             ctx,
+		service:         service,
+		displayMode:     actionableListMode,
+		prevDisplayMode: actionableListMode,
+		inputs:          forms,
 	}
 
 }
@@ -131,11 +133,35 @@ func (m model) Init() tea.Cmd {
 	return fetchTaskListCmd(&m)
 }
 
+// updateInputStyle recalculates each input style based on focused index
+func (m *model) updateInputStyle() {
+	for i := 0; i < len(m.inputs); i++ {
+		if i == m.inputIndex {
+			// Set focused state
+			m.inputs[i].Focus()
+			m.inputs[i].PromptStyle = focusedStyle
+			m.inputs[i].TextStyle = focusedStyle
+		} else {
+			// Remove focused state
+			m.inputs[i].Blur()
+			m.inputs[i].PromptStyle = noStyle
+			m.inputs[i].TextStyle = noStyle
+		}
+	}
+}
+
+func (m model) canSubmit() bool {
+	return m.inputIndex == len(m.inputs) && len(m.inputs[0].Value()) > 0
+}
+
 // ClearInputs clears all inputs
 func (m *model) ClearInputs() {
 	for i := range m.inputs {
 		m.inputs[i].Reset()
 	}
+	// Update input style based on focused index
+	m.inputIndex = 0
+	m.updateInputStyle()
 }
 
 // fetchTaskListCmd retrieves a list of tasks and returns ListMsg
@@ -226,16 +252,15 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			switch msg.Type {
 			// Back to the previous mode
 			case tea.KeyCtrlC, tea.KeyEscape:
-				m.displayMode = plannedListMode
+				m.displayMode = m.prevDisplayMode
 				m.ClearInputs()
-				m.inputIndex = 0
 				return m, nil
 
 			// Go to the next input
 			case tea.KeyTab, tea.KeyEnter:
 				// If submit button is focused end user hit enter, then submit the new item
-				if msg.Type == tea.KeyEnter && m.inputIndex == len(m.inputs) {
-					m.displayMode = plannedListMode
+				if msg.Type == tea.KeyEnter && m.canSubmit() {
+					m.displayMode = m.prevDisplayMode
 					req := &domain.NewTaskRequest{
 						Title:       m.inputs[0].Value(),
 						Description: m.inputs[1].Value(),
@@ -245,19 +270,8 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				}
 				var cmd tea.Cmd
 				m.inputIndex = (m.inputIndex + 1) % (len(m.inputs) + 1)
-				for i := 0; i < len(m.inputs); i++ {
-					if i == m.inputIndex {
-						// Set focused state
-						cmd = m.inputs[i].Focus()
-						m.inputs[i].PromptStyle = focusedStyle
-						m.inputs[i].TextStyle = focusedStyle
-					} else {
-						// Remove focused state
-						m.inputs[i].Blur()
-						m.inputs[i].PromptStyle = noStyle
-						m.inputs[i].TextStyle = noStyle
-					}
-				}
+				// Update input style based on focused index
+				m.updateInputStyle()
 				return m, cmd
 			}
 		}
@@ -271,7 +285,6 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 
 func (m *model) updateInput(msg tea.Msg) (tea.Model, tea.Cmd) {
 	cmds := make([]tea.Cmd, len(m.inputs))
-
 	// Only text inputs with Focus() set will respond, so it's safe to simply
 	// update all of them here without any further logic
 	for i := range m.inputs {
@@ -367,7 +380,7 @@ func choicesView(m model) string {
 	if m.displayMode == actionableListMode {
 		tpl = fmt.Sprintf("TODOs (%d/%d)\n\n", len(tasks), m.TaskList.MaxTskNum())
 	} else if m.displayMode == plannedListMode {
-		tpl = fmt.Sprintf("Planned Tasks (%d/%d)\n\n", len(tasks), len(m.TaskList))
+		tpl = fmt.Sprintf("Planned Tasks (%d)\n\n", len(tasks))
 	}
 	tpl += "%s\n\n"
 	tpl += helpMessage(&m)
@@ -561,6 +574,12 @@ func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 		case "e":
 			t := m.TaskList.ActionableTasks()[m.Choice]
 			return m, completeTaskCmd(&m, t)
+
+		// New task mode
+		case "a":
+			m.prevDisplayMode = m.displayMode
+			m.displayMode = newTaskMode
+			return m, nil
 		}
 
 	// Triggered by a new task list
@@ -604,6 +623,7 @@ func updateWithPlannedlistMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 
 		// New task mode
 		case "a":
+			m.prevDisplayMode = m.displayMode
 			m.displayMode = newTaskMode
 			return m, nil
 
