@@ -221,9 +221,9 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			case tea.KeyCtrlC, tea.KeyEscape:
 				m.displayMode = plannedListMode
 				// Clear all inputs
-				// for i := range m.inputs {
-				// 	m.inputs[i].Reset()
-				// }
+				for i := range m.inputs {
+					m.inputs[i].Reset()
+				}
 				m.inputIndex = 0
 				return m, nil
 
@@ -232,10 +232,14 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 				// If submit button is focused end user hit enter, then submit the new item
 				if msg.Type == tea.KeyEnter && m.inputIndex == len(m.inputs) {
 					m.displayMode = plannedListMode
-					return m, newTaskCmd(&m, &domain.NewTaskRequest{
+					req := &domain.NewTaskRequest{
 						Title:       m.inputs[0].Value(),
 						Description: m.inputs[1].Value(),
-					})
+					}
+					for i := range m.inputs {
+						m.inputs[i].Reset()
+					}
+					return m, newTaskCmd(&m, req)
 				}
 				var cmd tea.Cmd
 				m.inputIndex = (m.inputIndex + 1) % (len(m.inputs) + 1)
@@ -539,19 +543,20 @@ func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Quitting = true
 			return m, tea.Quit
 
-		// Switch actionable list mode to planned list mode
-		case "s":
+		// Toggle actionable list mode to planned list mode
+		case "t":
 			m.Choice = 0 // Reset choice index
 			m.displayMode = plannedListMode
 			return m, nil
 
-		// turn the selected task into planned one
+		// Move selected task into planned one
 		case "m":
 			m.Choice = 0 // Reset choice index
 			t := m.TaskList.ActionableTasks()[m.Choice]
 			return m, updateTaskCmd(&m, t.ToPlanned())
-		// complete the selected task
-		case " ":
+
+		// Complete selected task
+		case "e":
 			t := m.TaskList.ActionableTasks()[m.Choice]
 			return m, completeTaskCmd(&m, t)
 		}
@@ -584,14 +589,14 @@ func updateWithPlannedlistMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 			m.Quitting = true
 			return m, tea.Quit
 
-		// Switch planed list mode to actionable list mode
-		case "s":
+		// Toggle planed list mode to actionable list mode
+		case "t":
 			m.Choice = 0 // Reset choice index
 			m.displayMode = actionableListMode
 			return m, nil
 
-		// Turn selected planned task into actionable
-		case " ":
+		// Move selected planned task into actionable
+		case "m":
 			t := m.TaskList.PlannedTasks()[m.Choice]
 			return m, availableTaskCmd(&m, t)
 
