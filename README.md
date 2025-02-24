@@ -14,7 +14,7 @@ Ivy Lee Method Todo App
 - [ ] implement TUI
   - [ ] full screen
   - [x] list tasks
-  - [ ] add a new planned task
+  - [x] add a new planned task
   - [x] move a task from planned to actionable
   - [ ] update a task (title, description)
   - [x] delete/complete a task
