@@ -131,6 +131,13 @@ func (m model) Init() tea.Cmd {
 	return fetchTaskListCmd(&m)
 }
 
+// ClearInputs clears all inputs
+func (m *model) ClearInputs() {
+	for i := range m.inputs {
+		m.inputs[i].Reset()
+	}
+}
+
 // fetchTaskListCmd retrieves a list of tasks and returns ListMsg
 func fetchTaskListCmd(m *model) tea.Cmd {
 	return func() tea.Msg {
@@ -220,10 +227,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 			// Back to the previous mode
 			case tea.KeyCtrlC, tea.KeyEscape:
 				m.displayMode = plannedListMode
-				// Clear all inputs
-				for i := range m.inputs {
-					m.inputs[i].Reset()
-				}
+				m.ClearInputs()
 				m.inputIndex = 0
 				return m, nil
 
@@ -236,9 +240,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 						Title:       m.inputs[0].Value(),
 						Description: m.inputs[1].Value(),
 					}
-					for i := range m.inputs {
-						m.inputs[i].Reset()
-					}
+					m.ClearInputs()
 					return m, newTaskCmd(&m, req)
 				}
 				var cmd tea.Cmd
