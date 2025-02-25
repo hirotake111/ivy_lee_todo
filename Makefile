@@ -10,4 +10,6 @@ tui:
 build:
 	@go build -ldflags "-s -w" -o $(EXECUTABLE_NAME) $(SOURCE_FILE)
 
+release-local: # local-only release
+	@goreleaser release --snapshot --clean
 
