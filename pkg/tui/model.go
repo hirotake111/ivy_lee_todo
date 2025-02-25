@@ -183,6 +183,11 @@ func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 		// Toggle actionable list mode to planned list mode
 		case "t":
 			m.mode.toggleListMode()
+			if m.mode.showingActionable() {
+				m.list.Title = "TODO"
+			} else {
+				m.list.Title = "Planned"
+			}
 			return m, refleshDisplayItemCmd(m)
 
 		// Move selected task into planned one
@@ -298,10 +303,11 @@ func (m model) View() string {
 	}
 
 	if m.mode.isListMode() {
-		s = docStyle.Render(m.list.View())
-	} else {
-		s = newTaskFormView(m)
+		return docStyle.Render(m.list.View())
 	}
+
+	// New task form
+	s = newTaskFormView(m)
 
 	var errMessage string
 	if m.err != nil {
