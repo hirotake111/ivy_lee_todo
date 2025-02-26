@@ -1,5 +1,14 @@
 package tui
 
+type displayMode int
+
+const (
+	actionableListMode displayMode = iota
+	plannedListMode
+	newTaskMode
+	editTaskMode
+)
+
 type appMode struct {
 	mode displayMode
 	prev displayMode

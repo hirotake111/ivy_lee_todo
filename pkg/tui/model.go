@@ -15,28 +15,8 @@ import (
 	"github.com/hirotake111/ivy_lee_todo/pkg/service"
 )
 
-type displayMode int
-
-const (
-	progressBarWidth  = 71
-	progressFullChar  = "█"
-	progressEmptyChar = "░"
-	dotChar           = " • "
-
-	actionableListMode displayMode = iota
-	plannedListMode
-	newTaskMode
-	editTaskMode
-)
-
 // General stuff for styling the view
 var (
-	keywordStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("211"))
-	subtleStyle         = lipgloss.NewStyle().Foreground(lipgloss.Color("241"))
-	ticksStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("79"))
-	checkboxStyle       = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	progressEmpty       = subtleStyle.Render(progressEmptyChar)
-	dotStyle            = lipgloss.NewStyle().Foreground(lipgloss.Color("236")).Render(dotChar)
 	mainStyle           = lipgloss.NewStyle().MarginLeft(2)
 	errorStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
 	blurredStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
@@ -45,8 +25,7 @@ var (
 	focusedStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
 	cursorStyle         = focusedStyle
 	noStyle             = lipgloss.NewStyle()
-
-	docStyle = lipgloss.NewStyle().Margin(1, 2)
+	docStyle            = lipgloss.NewStyle().Margin(1, 2)
 
 	// Submit Button
 	blurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Submit"))
@@ -84,7 +63,7 @@ func InitializeModel(ctx context.Context, service *service.Service) model {
 	// Description
 	form = textinput.New()
 	form.Cursor.Style = cursorStyle
-	form.CharLimit = 32
+	form.CharLimit = 512
 	form.Placeholder = "Description"
 	form.PromptStyle = noStyle
 	form.TextStyle = noStyle

@@ -21,4 +21,5 @@ Ivy Lee Method Todo App
   - [x] new task list component
   - [x] refactor UI implementation
   - [ ] shortcut to open browser
+  - [ ] display message when a task is done/delted/created
 - [ ] move help message to service
