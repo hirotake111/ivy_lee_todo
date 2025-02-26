@@ -23,3 +23,4 @@ Ivy Lee Method Todo App
   - [x] shortcut to open browser
   - [ ] display message when a task is done/delted/created
 - [ ] move help message to service
+- [ ] add log view
