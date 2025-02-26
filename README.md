@@ -22,7 +22,7 @@ Ivy Lee Method Todo App
   - [x] refactor UI implementation
   - [x] shortcut to open browser
   - [ ] display message when a task gets done/delted/created
-- [ ] move help message to service
+- [ ] update help messages
 - [ ] highlight a task currently been worked
 - [ ] sort tasks by prority
 - [ ] add log view

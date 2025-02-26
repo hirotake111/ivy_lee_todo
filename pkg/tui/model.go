@@ -182,9 +182,11 @@ func updateWithListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 				break
 			}
 			if m.mode.showingActionable() {
+				// Make the task planned
 				return m, updateTaskCmd(m, task.ToPlanned())
 			}
-			return m, updateTaskCmd(m, task.ToActionable())
+			// Make the task actionable
+			return m, makeActionableTaskCmd(m, task.ToActionable())
 
 		// Complete selected task
 		case " ":
@@ -226,6 +228,10 @@ func updateWithListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, errCmd(err)
 			}
 		}
+
+	case tasksUpdatedMsg:
+		// Time to update UI
+		return m, fetchTaskListCmd(m)
 
 	// Triggered by a new task list
 	case listMsg:

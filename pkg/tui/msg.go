@@ -19,3 +19,11 @@ func (e errMsg) Error() string {
 type newDisplayItemsMsg struct {
 	tasks []*domain.Task
 }
+
+// successMsg contains text message indicating the result of an action
+type successMsg struct {
+	text string
+}
+
+// tasksUpdatedMsg indicates tasks are stable and UI need to reflesh
+type tasksUpdatedMsg struct{}

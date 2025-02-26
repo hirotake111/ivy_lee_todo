@@ -27,9 +27,9 @@ func errCmd(err error) tea.Cmd {
 func newTaskCmd(m model, task *domain.NewTaskRequest) tea.Cmd {
 	return func() tea.Msg {
 		if err := m.service.AddTask(m.ctx, task.Title, task.Description); err != nil {
-			return errCmd(err)
+			return errMsg{err: err}
 		}
-		return fetchTaskListCmd(m)()
+		return tasksUpdatedMsg{}
 	}
 }
 
@@ -39,7 +39,17 @@ func updateTaskCmd(m model, task *domain.Task) tea.Cmd {
 		if err := m.service.Update(m.ctx, task); err != nil {
 			return errMsg{err: err}
 		}
-		return fetchTaskListCmd(m)()
+		return tasksUpdatedMsg{}
+	}
+}
+
+// makeActionableTaskCmd makes a task actionable
+func makeActionableTaskCmd(m model, task *domain.Task) tea.Cmd {
+	return func() tea.Msg {
+		if err := m.service.MakeActionable(m.ctx, task.Id()); err != nil {
+			return errMsg{err: err}
+		}
+		return tasksUpdatedMsg{}
 	}
 }
 
@@ -49,7 +59,7 @@ func completeTaskCmd(m model, task *domain.Task) tea.Cmd {
 		if err := m.service.DeleteTask(m.ctx, task.Id()); err != nil {
 			return errMsg{err: err}
 		}
-		return fetchTaskListCmd(m)()
+		return tasksUpdatedMsg{}
 	}
 }
 
@@ -59,7 +69,7 @@ func deleteTaskCmd(m model, task *domain.Task) tea.Cmd {
 		if err := m.service.DeleteTask(m.ctx, task.Id()); err != nil {
 			return errMsg{err: err}
 		}
-		return fetchTaskListCmd(m)()
+		return tasksUpdatedMsg{}
 	}
 }
 
@@ -70,5 +80,12 @@ func refleshDisplayItemCmd(m model) tea.Cmd {
 			return newDisplayItemsMsg{tasks: m.TaskList.ActionableTasks()}
 		}
 		return newDisplayItemsMsg{tasks: m.TaskList.PlannedTasks()}
+	}
+}
+
+// successCmd generates successMsg using passed text value
+func successCmd(text string) tea.Cmd {
+	return func() tea.Msg {
+		return successMsg{text: text}
 	}
 }
