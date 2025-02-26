@@ -186,7 +186,7 @@ func updateWithListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, updateTaskCmd(m, task.ToPlanned())
 			}
 			// Make the task actionable
-			return m, makeActionableTaskCmd(m, task.ToActionable())
+			return m, makeActionableTaskCmd(m, task)
 
 		// Complete selected task
 		case " ":
@@ -248,6 +248,9 @@ func updateWithListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Triggered by error message
 	case errMsg:
 		m.err = msg
+
+	case successMsg:
+		m.err = fmt.Errorf("success")
 	}
 
 	var cmd tea.Cmd
