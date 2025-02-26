@@ -3,6 +3,9 @@ package tui
 import (
 	"context"
 	"fmt"
+	"os/exec"
+	"regexp"
+	"runtime"
 	"strings"
 
 	"github.com/charmbracelet/bubbles/cursor"
@@ -30,6 +33,9 @@ var (
 	// Submit Button
 	blurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Submit"))
 	focusedButton = focusedStyle.Render("[ Submit ]")
+
+	// URL Regex
+	match = regexp.MustCompile(`^https?:\/\/\S*\w$`)
 )
 
 type model struct {
@@ -139,13 +145,13 @@ func (m model) selectedTask() (*domain.Task, error) {
 func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	m.err = nil // Refresh error message
 	if m.mode.isListMode() {
-		return updateWithActionableListMode(m, msg)
+		return updateWithListMode(m, msg)
 	} else {
 		return updateWithTaskEditMode(m, msg)
 	}
 }
 
-func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
+func updateWithListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	switch msg := msg.(type) {
 	case tea.WindowSizeMsg:
 		h, v := docStyle.GetFrameSize()
@@ -199,11 +205,25 @@ func updateWithActionableListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 			}
 			return m, deleteTaskCmd(m, selected)
 
-		// New task mode
+		// Toggle new task mode
 		case "a":
-			// Update the view only when user is not filtering
+			// Toggle new task mode only when user is not filtering
 			if !(m.list.FilterState() != list.Unfiltered) {
 				m.mode.toNewTaskMode()
+			}
+
+		// Open browser
+		case "o":
+			selected, err := m.selectedTask()
+			if err != nil {
+				break
+			}
+			url := string(match.Find([]byte(selected.Description())))
+			if len(url) == 0 {
+				break
+			}
+			if err := openBrowser(url); err != nil {
+				return m, errCmd(err)
 			}
 		}
 
@@ -315,4 +335,14 @@ func newTaskFormView(m model) string {
 	b.WriteString(cursorModeHelpStyle.Render(m.cursorMode.String()))
 	b.WriteString(helpStyle.Render(" (ctrl+r to change style)"))
 	return b.String()
+}
+
+func openBrowser(url string) error {
+	switch runtime.GOOS {
+	case "darwin":
+		return exec.Command("open", url).Start()
+	default:
+		// OS not supported
+		return nil
+	}
 }
