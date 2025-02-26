@@ -2,7 +2,7 @@
 
 Ivy Lee Method Todo App
 
-[Use This 100-Year-Old Productivity Method to Get More Done](https://lifehacker.com/work/the-ivy-lee-productivity-method)
+[Ivy Lee Method: The most effective minimalist productivity method](https://medium.com/@mentalgarden/ivy-lee-method-the-most-effective-minimalist-productivity-method-94d87fbc8389)
 
 ## TODO
 
@@ -16,12 +16,12 @@ Ivy Lee Method Todo App
   - [x] list tasks
   - [x] add a new planned task
   - [x] move a task from planned to actionable
-  - [ ] update a task (title, description)
+  - [ ] edit task form (title, description)
   - [x] delete/complete a task
   - [x] new task list component
   - [x] refactor UI implementation
   - [x] shortcut to open browser
-  - [ ] display message when a task is done/delted/created
+  - [ ] display message when a task gets done/delted/created
 - [ ] move help message to service
 - [ ] highlight a task currently been worked
 - [ ] sort tasks by prority
