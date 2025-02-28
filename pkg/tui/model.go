@@ -43,37 +43,38 @@ type model struct {
 	Quitting        bool              // Is the program quitting now?
 	TaskList        domain.TaskList   // This includes both planned and actionable tasks. You can get either through receiver methods
 	service         *service.Service  // service object
-	displayMode     displayMode       // Whether it's showing the list of actionable tasks
-	prevDisplayMode displayMode       // Previous display mode
+	displayMode     listMode          // Whether it's showing the list of actionable tasks
+	prevDisplayMode listMode          // Previous display mode
 	err             error             // An error message
 	cursorMode      cursor.Mode       // Behavior of the cursor (not neccessary?)
-	inputIndex      int               // Index of the text input fields
+	formIndex       int               // Index of the text input fields
 	inputs          []textinput.Model // text input fields
+	itemBeginEdited *domain.Task      // Indicates if the task beingedited is actionable or not
 	list            list.Model        // A list of tasks currently been displayed
 	showActionable  bool              // True when showing a list of available tasks
 	mode            appMode           // app mode
+
 }
 
 func InitializeModel(ctx context.Context, service *service.Service) model {
 	forms := make([]textinput.Model, 0)
-	var form textinput.Model
 	// Title
-	form = textinput.New()
-	form.Cursor.Style = cursorStyle
-	form.CharLimit = 32
-	form.Placeholder = "Title"
-	form.Focus()
-	form.PromptStyle = focusedStyle
-	form.TextStyle = focusedStyle
-	forms = append(forms, form)
+	title := textinput.New()
+	title.Cursor.Style = cursorStyle
+	title.CharLimit = 32
+	title.Placeholder = "Title"
+	title.Focus()
+	title.PromptStyle = focusedStyle
+	title.TextStyle = focusedStyle
+	forms = append(forms, title)
 	// Description
-	form = textinput.New()
-	form.Cursor.Style = cursorStyle
-	form.CharLimit = 512
-	form.Placeholder = "Description"
-	form.PromptStyle = noStyle
-	form.TextStyle = noStyle
-	forms = append(forms, form)
+	desc := textinput.New()
+	desc.Cursor.Style = cursorStyle
+	desc.CharLimit = 512
+	desc.Placeholder = "Description"
+	desc.PromptStyle = noStyle
+	desc.TextStyle = noStyle
+	forms = append(forms, desc)
 
 	list := list.New(make([]list.Item, 0), list.NewDefaultDelegate(), 0, 0)
 	list.Title = "TODO"
@@ -101,7 +102,7 @@ func (m model) Init() tea.Cmd {
 // updateInputStyle recalculates each input style based on focused index
 func (m *model) updateInputStyle() {
 	for i := 0; i < len(m.inputs); i++ {
-		if i == m.inputIndex {
+		if i == m.formIndex {
 			// Set focused state
 			m.inputs[i].Focus()
 			m.inputs[i].PromptStyle = focusedStyle
@@ -116,7 +117,7 @@ func (m *model) updateInputStyle() {
 }
 
 func (m model) canSubmit() bool {
-	return m.inputIndex == len(m.inputs) && len(m.inputs[0].Value()) > 0
+	return m.formIndex == len(m.inputs) && len(m.inputs[0].Value()) > 0
 }
 
 // ClearInputs clears all inputs
@@ -125,7 +126,7 @@ func (m *model) ClearInputs() {
 		m.inputs[i].Reset()
 	}
 	// Update input style based on focused index
-	m.inputIndex = 0
+	m.formIndex = 0
 	m.updateInputStyle()
 }
 
@@ -147,7 +148,7 @@ func (m model) Update(msg tea.Msg) (tea.Model, tea.Cmd) {
 	if m.mode.isListMode() {
 		return updateWithListMode(m, msg)
 	} else {
-		return updateWithTaskEditMode(m, msg)
+		return updateWithFormMode(m, msg)
 	}
 }
 
@@ -161,7 +162,7 @@ func updateWithListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	// Triggered by a key stroke
 	case tea.KeyMsg:
 		switch msg.String() {
-		case "ctrl+c", "q":
+		case "ctrl+c", "q", "esc":
 			m.Quitting = true
 			return m, tea.Quit
 
@@ -214,6 +215,13 @@ func updateWithListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 				m.mode.toNewTaskMode()
 			}
 
+		// Toggle edit task mode
+		case "e":
+			// Toggle new task mode only when user is not filtering
+			if !(m.list.FilterState() != list.Unfiltered) {
+				return m, goToEditModeCmd(m)
+			}
+
 		// Open browser
 		case "o":
 			selected, err := m.selectedTask()
@@ -228,6 +236,18 @@ func updateWithListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 				return m, errCmd(err)
 			}
 		}
+
+	case toEditModeMsg:
+		var cmd tea.Cmd
+		m.inputs[0].SetValue(msg.task.Title())
+		m.inputs[1].SetValue(msg.task.Description())
+		m.mode.toEditTaskMode()
+		// t, err := m.selectedTask()
+		// if err != nil {
+		// 	panic(err)
+		// }
+		// m.list.Title = fmt.Sprintf("Updatintg %+v", t)
+		return m, cmd
 
 	case tasksUpdatedMsg:
 		// Time to update UI
@@ -258,7 +278,7 @@ func updateWithListMode(m model, msg tea.Msg) (tea.Model, tea.Cmd) {
 	return m, cmd
 }
 
-func updateWithTaskEditMode(m model, msg tea.Msg) (model, tea.Cmd) {
+func updateWithFormMode(m model, msg tea.Msg) (model, tea.Cmd) {
 	switch msg := msg.(type) {
 	// Triggered by a key stroke
 	case tea.KeyMsg:
@@ -274,16 +294,32 @@ func updateWithTaskEditMode(m model, msg tea.Msg) (model, tea.Cmd) {
 		case tea.KeyTab, tea.KeyEnter:
 			// Perform submission only when the button is focused & end user hits the enter key.
 			if msg.Type == tea.KeyEnter && m.canSubmit() {
-				m.mode.toPrevMode()
-				req := &domain.NewTaskRequest{
-					Title:       m.inputs[0].Value(),
-					Description: m.inputs[1].Value(),
+				if m.mode.isNewTaskMode() {
+					req := &domain.NewTaskRequest{
+						Title:       m.inputs[0].Value(),
+						Description: m.inputs[1].Value(),
+					}
+					m.ClearInputs()
+					m.mode.toPrevMode()
+					return m, newTaskCmd(m, req)
+				} else {
+					task, err := m.selectedTask()
+					if err != nil {
+						panic(err)
+					}
+					t := domain.NewTask(
+						task.Id(),
+						m.inputs[0].Value(),
+						m.inputs[1].Value(),
+						task.IsActionable(),
+					)
+					m.ClearInputs()
+					m.mode.toPrevMode()
+					return m, updateTaskCmd(m, t)
 				}
-				m.ClearInputs()
-				return m, newTaskCmd(m, req)
 			}
 			var cmd tea.Cmd
-			m.inputIndex = (m.inputIndex + 1) % (len(m.inputs) + 1)
+			m.formIndex = (m.formIndex + 1) % (len(m.inputs) + 1)
 			m.updateInputStyle()
 			return m, cmd
 		}
@@ -335,7 +371,7 @@ func newTaskFormView(m model) string {
 		}
 	}
 	button := &blurredButton
-	if m.inputIndex == len(m.inputs) {
+	if m.formIndex == len(m.inputs) {
 		button = &focusedButton
 	}
 	fmt.Fprintf(&b, "\n\n%s\n\n", *button)

@@ -89,3 +89,14 @@ func successCmd(text string) tea.Cmd {
 		return successMsg{text: text}
 	}
 }
+
+// goToEditModeCmd generates toEditModeMsg
+func goToEditModeCmd(m model) tea.Cmd {
+	return func() tea.Msg {
+		t, err := m.selectedTask()
+		if err != nil {
+			return errMsg{err: err}
+		}
+		return toEditModeMsg{task: t}
+	}
+}

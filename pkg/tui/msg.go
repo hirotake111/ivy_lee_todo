@@ -27,3 +27,7 @@ type successMsg struct {
 
 // tasksUpdatedMsg indicates tasks are stable and UI need to reflesh
 type tasksUpdatedMsg struct{}
+
+type toEditModeMsg struct {
+	task *domain.Task
+}
