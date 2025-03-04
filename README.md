@@ -12,3 +12,4 @@ Ivy Lee Method Todo App
 - [ ] sort tasks by prority
 - [ ] add log view
 - [ ] display message when a task gets done/delted/created
+- [ ] undo previos action
