@@ -12,7 +12,6 @@ import (
 	"github.com/charmbracelet/bubbles/list"
 	"github.com/charmbracelet/bubbles/textinput"
 	tea "github.com/charmbracelet/bubbletea"
-	"github.com/charmbracelet/lipgloss"
 	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
 	"github.com/hirotake111/ivy_lee_todo/pkg/domain"
 	"github.com/hirotake111/ivy_lee_todo/pkg/service"
@@ -20,15 +19,6 @@ import (
 
 // General stuff for styling the view
 var (
-	mainStyle           = lipgloss.NewStyle().MarginLeft(2)
-	errorStyle          = lipgloss.NewStyle().Foreground(lipgloss.Color("212"))
-	blurredStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("240"))
-	helpStyle           = blurredStyle
-	cursorModeHelpStyle = lipgloss.NewStyle().Foreground(lipgloss.Color("244"))
-	focusedStyle        = lipgloss.NewStyle().Foreground(lipgloss.Color("205"))
-	cursorStyle         = focusedStyle
-	noStyle             = lipgloss.NewStyle()
-	docStyle            = lipgloss.NewStyle().Margin(1, 2)
 
 	// Submit Button
 	blurredButton = fmt.Sprintf("[ %s ]", blurredStyle.Render("Submit"))
