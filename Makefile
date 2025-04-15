@@ -13,3 +13,6 @@ build:
 release-local: # local-only release
 	@goreleaser release --snapshot --clean
 
+sql: # Connect to the database
+	sqlite3 $(HOME)/Library/Caches/ivy_lee_todo/data.db
+
