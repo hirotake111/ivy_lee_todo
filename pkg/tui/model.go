@@ -7,6 +7,7 @@ import (
 	"regexp"
 	"runtime"
 	"strings"
+	"time"
 
 	"github.com/charmbracelet/bubbles/cursor"
 	"github.com/charmbracelet/bubbles/list"
@@ -302,6 +303,7 @@ func updateWithFormMode(m model, msg tea.Msg) (model, tea.Cmd) {
 						m.inputs[0].Value(),
 						m.inputs[1].Value(),
 						task.IsActionable(),
+						time.Now(),
 					)
 					m.ClearInputs()
 					m.mode.toPrevMode()

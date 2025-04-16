@@ -2,6 +2,8 @@ package repository
 
 import (
 	"context"
+	"fmt"
+	"time"
 
 	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
 	"github.com/hirotake111/ivy_lee_todo/pkg/db"
@@ -10,15 +12,16 @@ import (
 	_ "github.com/mattn/go-sqlite3"
 )
 
-type taskDto struct {
+type rawTask struct {
 	Id          int
 	Title       string
 	Description string
 	Actionable  bool
+	CreatedAt   time.Time
 }
 
-func (t taskDto) toTask() *domain.Task {
-	return domain.NewTask(t.Id, t.Title, t.Description, t.Actionable)
+func (r rawTask) toTask() *domain.Task {
+	return domain.NewTask(r.Id, r.Title, r.Description, r.Actionable, r.CreatedAt)
 }
 
 type SQLiteRepository struct{}
@@ -41,27 +44,39 @@ func (s *SQLiteRepository) Delete(ctx context.Context, db db.Transaction, id int
 
 // Find implements domain.TaskRepository.
 func (s *SQLiteRepository) Find(ctx context.Context, db db.Queryer, id int) (*domain.Task, error) {
-	row := db.QueryRow(ctx, "SELECT id, title, description, actionable FROM task WHERE id = $1 and deleted_at is null", id)
-	var t taskDto
-	if err := row.Scan(&t.Id, &t.Title, &t.Description, &t.Actionable); err != nil {
+	row := db.QueryRow(ctx, "SELECT id, title, description, actionable, created_at FROM task WHERE id = $1 and deleted_at is null", id)
+	var t rawTask
+	var caScr string
+	if err := row.Scan(&t.Id, &t.Title, &t.Description, &t.Actionable, &caScr); err != nil {
 		return nil, apperrors.NotFound
 	}
+	cratedAt, err := time.Parse(time.RFC3339, caScr)
+	if err != nil {
+		return nil, fmt.Errorf("failed to parse created_at: %w", err)
+	}
+	t.CreatedAt = cratedAt
 	return t.toTask(), nil
 }
 
 // List implements domain.TaskRepository.
 func (s *SQLiteRepository) List(ctx context.Context, db db.Queryer) (domain.TaskList, error) {
-	rows, err := db.Query(ctx, "SELECT id, title, description, actionable FROM task WHERE deleted_at is null")
+	rows, err := db.Query(ctx, "SELECT id, title, description, actionable, created_at FROM task WHERE deleted_at is null")
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
 	var l domain.TaskList
 	for rows.Next() {
-		var t taskDto
-		if err := rows.Scan(&t.Id, &t.Title, &t.Description, &t.Actionable); err != nil {
+		var t rawTask
+		var caStr string
+		if err := rows.Scan(&t.Id, &t.Title, &t.Description, &t.Actionable, &caStr); err != nil {
 			return nil, err
 		}
+		createdAt, err := time.Parse(time.RFC3339, caStr)
+		if err != nil {
+			return nil, err
+		}
+		t.CreatedAt = createdAt
 		l = append(l, t.toTask())
 	}
 	return l, nil

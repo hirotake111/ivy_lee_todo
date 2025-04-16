@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"time"
 
 	"github.com/hirotake111/ivy_lee_todo/pkg/apperrors"
 	"github.com/hirotake111/ivy_lee_todo/pkg/db"
@@ -40,7 +41,7 @@ func (m *MemoryRepository) Create(ctx context.Context, db db.Transaction, req *d
 		return errors.New("title can't be empty")
 	}
 	id := len(m.tasks) + 1
-	t := req.ToActionableTask(id)
+	t := req.ToActionableTask(id, time.Now())
 	m.tasks = append(m.tasks, t)
 	return nil
 }

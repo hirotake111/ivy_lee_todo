@@ -1,6 +1,8 @@
 package tui
 
 import (
+	"sort"
+
 	tea "github.com/charmbracelet/bubbletea"
 	"github.com/hirotake111/ivy_lee_todo/pkg/domain"
 )
@@ -12,6 +14,9 @@ func fetchTaskListCmd(m model) tea.Cmd {
 		if err != nil {
 			return errMsg{err: err}
 		}
+		sort.Slice(l, func(i, j int) bool {
+			return l[i].CreatedAt().After(l[j].CreatedAt())
+		})
 		return listMsg{tasks: l}
 	}
 }

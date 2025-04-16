@@ -95,7 +95,7 @@ CREATE TABLE IF NOT EXISTS task (
 	title TEXT NOT NULL, -- Title
 	description TEXT NOT NULL DEFAULT '', -- Description
 	actionable INTEGER NOT NULL DEFAULT 0 CHECK (actionable IN (0 ,1)), -- A boolean type indicating whether the task is actionable
-    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, -- Store as DATETIME
+	created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP, -- Store as DATETIME
 	deleted_at DATETIME -- This has a value if the task is deleted
 )`
 	if _, err := db.Exec(stmt); err != nil {

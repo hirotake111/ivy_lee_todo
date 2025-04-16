@@ -2,6 +2,7 @@ package domain
 
 import (
 	"context"
+	"time"
 
 	"github.com/hirotake111/ivy_lee_todo/pkg/db"
 )
@@ -11,12 +12,13 @@ type NewTaskRequest struct {
 	Description string
 }
 
-func (t *NewTaskRequest) ToActionableTask(id int) *Task {
+func (t *NewTaskRequest) ToActionableTask(id int, now time.Time) *Task {
 	return &Task{
 		id:          id,
 		title:       t.Title,
 		description: t.Description,
 		actionable:  false,
+		createdAt:   now,
 	}
 }
 
